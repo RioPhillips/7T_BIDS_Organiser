@@ -117,7 +117,7 @@ def cli():
       3. dcm2bids fixanat           - Fix anatomical files (MP2RAGE)
       4. dcm2bids fixfmap           - Fix fieldmap files
       5. dcm2bids fixepi            - Fix EPI JSON metadata
-      6. dcm2bids b1dcm2rawdata     - Fix B1 map files
+      6. dcm2bids b1src2rawdata     - Fix B1 map files
       7. dcm2bids reorient          - Reorient images
       8. dcm2bids slicetime         - Slice timing correction
       9. dcm2bids validate          - Run BIDS validator
@@ -356,12 +356,12 @@ def fixepi(studydir, subject, session, force, verbose, ap_phase_enc):
 
 
 
-# b1dcm2rawdata command
+# b1src2rawdata command
 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def b1dcm2rawdata(studydir, subject, session, force, verbose):
+def b1src2rawdata(studydir, subject, session, force, verbose):
     """
     Import B1 map files.
     
@@ -369,8 +369,8 @@ def b1dcm2rawdata(studydir, subject, session, force, verbose):
     heudiconv issues with B1 maps that cause incorrect naming).
     """
     studydir = resolve_studydir(studydir)
-    from dcm2bids.commands.b1dcm2rawdata import run_b1dcm2rawdata
-    run_b1dcm2rawdata(
+    from dcm2bids.commands.b1src2rawdata import run_b1src2rawdata
+    run_b1src2rawdata(
         studydir=studydir,
         subject=subject,
         session=session,

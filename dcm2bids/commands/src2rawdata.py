@@ -153,9 +153,9 @@ def _check_heuristic_session_support(heuristic: Path, logger) -> None:
             logger.warning("  'sub-{subject}/{session}/anat/sub-{subject}_ses-{session}_T1w'")
             logger.warning("Without this, files will NOT be organized by session.")
             logger.warning("=" * 60)
-        elif not has_session_in_filename:
-            logger.warning("Heuristic has {session} in path but not in filenames.")
-            logger.warning("Consider using: sub-{subject}_ses-{session}_<suffix>")
+        # elif not has_session_in_filename:
+        #     logger.warning("Heuristic has {session} in path but not in filenames.")
+        #     logger.warning("Consider using: sub-{subject}_ses-{session}_<suffix>")
     except Exception as e:
         logger.debug(f"Could not check heuristic for session support: {e}")
 

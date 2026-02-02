@@ -1,5 +1,5 @@
 """
-b1dcm2rawdata command - Convert B1 map DICOMs to BIDS rawdata.
+b1src2rawdata command - Convert B1 map DICOMs to BIDS rawdata.
 
 Converts B1 map DICOMs using dcm2niix directly.
 This is a workaround for heudiconv issues with B1 maps that cause
@@ -20,7 +20,7 @@ from typing import List
 from dcm2bids.core import Session, setup_logging
 
 
-def run_b1dcm2rawdata(
+def run_b1src2rawdata(
     studydir: Path,
     subject: str,
     session: str,
@@ -49,7 +49,7 @@ def run_b1dcm2rawdata(
         List of created files
     """
     sess = Session(studydir, subject, session)
-    log_file = sess.paths["logs"] / "b1dcm2rawdata.log"
+    log_file = sess.paths["logs"] / "b1src2rawdata.log"
     logger = setup_logging("b1dcm2rawdata", log_file, verbose)
     
     logger.info(f"Converting B1 maps for sub-{subject}_ses-{session}")

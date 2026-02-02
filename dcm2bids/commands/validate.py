@@ -96,29 +96,6 @@ def run_validate(
         logger.warning(f"✗ BIDS Validation FAILED (exit code {result.returncode})")
         logger.info(f"See detailed log: {log_file}")
         
-        _print_validation_summary(log_file, logger)
         
         return False
 
-
-def _print_validation_summary(log_file: Path, logger) -> None:
-    """Print a summary of validation errors/warnings."""
-    try:
-        with open(log_file) as f:
-            lines = f.readlines()
-        
-        errors = [l for l in lines if "[ERR]" in l or "Error" in l]
-        warnings = [l for l in lines if "[WARN]" in l or "Warning" in l]
-        
-        if errors:
-            logger.warning(f"Errors: {len(errors)}")
-            for err in errors[:5]:  # show first 5
-                logger.warning(f"  {err.strip()}")
-            if len(errors) > 5:
-                logger.warning(f"  ... and {len(errors) - 5} more errors")
-        
-        if warnings:
-            logger.info(f"Warnings: {len(warnings)}")
-    
-    except Exception:
-        pass

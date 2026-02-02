@@ -184,7 +184,7 @@ def _add_intended_for(
     intended_for = []
     for func_file in sorted(func_dir.glob(f"{prefix}_task-*_bold.nii.gz")):
         # "IntendedFor" should be relative to session directory
-        rel_path = func_file.relative_to(sess.paths["rawdata"])
+        rel_path = func_file.relative_to(sess.paths["rawdata_subject"])
         intended_for.append(str(rel_path))
     
     if not intended_for:

@@ -50,7 +50,6 @@ class Session:
         self.ses_prefix = f"ses-{session}"
         self.subses_prefix = f"sub-{subject}_ses-{session}"
         
-        # Initialize paths
         self.paths = self._init_paths()
     
     def _init_paths(self) -> Dict[str, Path]:
@@ -58,21 +57,21 @@ class Session:
         base = self.studydir
         
         return {
-            # Main BIDS directories
+            #  BIDS directories
             "rawdata": base / "rawdata" / self.sub_prefix / self.ses_prefix,
+            "rawdata_subject": base / "rawdata" / self.sub_prefix,
+            "rawdata_root": base / "rawdata",
             "sourcedata": base / "sourcedata" / self.sub_prefix / self.ses_prefix,
             
-            # Modality directories (under rawdata)
+            #  rawdata directories
             "anat": base / "rawdata" / self.sub_prefix / self.ses_prefix / "anat",
             "func": base / "rawdata" / self.sub_prefix / self.ses_prefix / "func",
             "fmap": base / "rawdata" / self.sub_prefix / self.ses_prefix / "fmap",
             "dwi": base / "rawdata" / self.sub_prefix / self.ses_prefix / "dwi",
             
-            # Derivatives and logs
             "derivatives": base / "derivatives",
             "logs": base / "derivatives" / "logs" / self.sub_prefix / self.ses_prefix,
             
-            # Code and config
             "code": base / "code",
             
             # DICOM source (if provided)
@@ -106,9 +105,7 @@ class Session:
                 self.paths[key].mkdir(parents=True, exist_ok=True)
                 logger.debug(f"Ensured directory: {self.paths[key]}")
     
-    # -------------------------------------------------------------------------
-    # File operations
-    # -------------------------------------------------------------------------
+    # file operations
     
     def get_json(self, path: Path) -> Dict[str, Any]:
         """
@@ -195,10 +192,8 @@ class Session:
             return True
         return False
     
-    # -------------------------------------------------------------------------
     # BIDS naming helpers
-    # -------------------------------------------------------------------------
-    
+    #
     def bids_name(self, suffix: str, **entities) -> str:
         """
         Generate a BIDS-compliant filename.
@@ -217,7 +212,7 @@ class Session:
         """
         parts = [self.subses_prefix]
         
-        # Standard entity order
+        # entity order
         entity_order = ['task', 'acq', 'ce', 'rec', 'dir', 'run', 'echo', 'part', 'inv']
         
         for entity in entity_order:
@@ -246,9 +241,7 @@ class Session:
         """
         return str(Path(abs_path).relative_to(self.paths["rawdata"]))
     
-    # -------------------------------------------------------------------------
     # Scans.tsv management
-    # -------------------------------------------------------------------------
     
     def read_scans_tsv(self) -> tuple[list[str], list[dict]]:
         """
@@ -301,12 +294,12 @@ class Session:
         """
         fieldnames, rows = self.read_scans_tsv()
         
-        # Add any new columns
+        # add any new columns
         for key in extra:
             if key not in fieldnames:
                 fieldnames.append(key)
         
-        # Check if already exists
+        # check if already exists
         existing = [r for r in rows if r.get("filename") == filename]
         if existing:
             logger.debug(f"Entry already in scans.tsv: {filename}")
@@ -388,7 +381,7 @@ class Session:
         """
         fieldnames, rows = self.read_scans_tsv()
         
-        # Find the old entry
+        # find old entry
         old_entry = None
         old_idx = None
         for idx, row in enumerate(rows):
@@ -401,10 +394,10 @@ class Session:
             logger.warning(f"Entry not found in scans.tsv for replace: {old_filename}")
             return False
         
-        # Remove old entry
+        # remove old entry
         rows.pop(old_idx)
         
-        # Add new entries with inherited metadata at the same position
+        # new entries with inherited metadata at the same position
         for new_filename in new_filenames:
             new_entry = old_entry.copy()
             new_entry["filename"] = new_filename
@@ -458,7 +451,7 @@ class Session:
         added = []
         
         if remove_missing:
-            # Remove entries for non-existent files
+            # remove entries for non-existent files
             new_rows = []
             for row in rows:
                 filepath = rawdata / row.get("filename", "")
@@ -470,7 +463,7 @@ class Session:
             rows = new_rows
         
         if add_new:
-            # Find all .nii.gz files not in scans.tsv
+            # find .nii.gz files not in scans.tsv
             existing_filenames = {r.get("filename") for r in rows}
             
             for modality in ["anat", "func", "fmap", "dwi"]:
@@ -542,7 +535,7 @@ def get_heuristic_path(studydir: Path, config: Optional[Dict] = None) -> Optiona
             heuristic_path = Path(studydir) / heuristic_path
         return heuristic_path
     
-    # Default location
+    # default location
     default_path = Path(studydir) / "code" / "heuristic.py"
     if default_path.exists():
         return default_path
