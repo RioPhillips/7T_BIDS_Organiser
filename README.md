@@ -13,32 +13,60 @@ Create a new conda environment
 conda create -n "dcm2bids" python=3.11
 conda install -c conda-forge heudiconv=1.3.3 (if using local heudiconv)
 conda install -c conda-forge dcm2niix=1.0.20220720
+git clone https://github.com/RioPhillips/7T_BIDS_Organiser.git
 ```
 
 
 ```bash
 # from source
+conda activate dcm2bids
 pip install -e .
 
 # or with dev dependencies
 pip install -e ".[dev]"
 ```
 
-### Dependencies
-
-- Python 3.9+
-- [heudiconv](https://heudiconv.readthedocs.io/)
-- [dcm2niix](https://github.com/rordenlab/dcm2niix)
+### Other dependencies
 - [FSL](https://fsl.fmrib.ox.ac.uk/fsl/) (for reorientation and slice timing)
 - Docker (for BIDS validator and MRIQC) (optional, you can also use local versions)
 
 ## Quick Start
 
-### Initialize a new study
+### Initialize and configure a new study
 
+- In your target studydirectory create a code/ directory with the following files
+
+#### code/config.json
 ```bash
-dcm2bids init --studydir /path/to/study --name "My 7T Study"
+
+{
+    "studydir": "/path/to/studydir",
+    "heuristic": "/path/to/your/heuristic",
+    "epi_ap_phase_enc_dir": "j-",
+    "orientation": "LPI",
+    "slice_order": "down",
+    "slice_direction": 3
+
+}
 ```
+The "orientation" flag uses FreeSurfer LPI, see https://github.com/tknapen/tknapen.github.io/wiki/Anatomical-workflows#coordinate-systems-across-software-packages for more in-depth about this. 
+
+#### code/mp2rage.json
+```bash
+{
+    "RepetitionTimeExcitation": 0.006,     # BIDS flag for TR
+    "RepetitionTimePreparation": 5,        # BIDS flag for TRPrep
+    "InversionTime": [0.9, 2.0],           # this is the TI-list
+    "NumberShots": 128,                    # this is the "SegLength"
+    "FlipAngle": [6, 8]                    # this is the FA-list
+}
+
+```
+This file with BIDS-required metadata for the MP2RAGE-files. When setting up, make sure to change these parameters to fit with the specific protocol used in your study. 
+
+#### Heuristic file
+
+Create `code/heuristic.py` (or use an old one) to match your scanning protocol. See the [heudiconv documentation](https://heudiconv.readthedocs.io/en/latest/heuristics.html) for details.
 
 ### Convert a single subject/session
 
@@ -116,6 +144,7 @@ dcm2bids run-all \
 studydir/
 ├── code/
 │   ├── config.json          # Study configuration
+|   ├── mp2rage.json         # MP2RAGE metadata file
 │   └── heuristic.py         # Heudiconv heuristic file
 ├── sourcedata/
 │   └── sub-S01/
@@ -141,23 +170,6 @@ studydir/
     └── mriqc/
 ```
 
-## Configuration
-
-### code/config.json
-
-```json
-{
-    "heuristic": "code/heuristic.py",
-    "epi_ap_phase_enc_dir": "j-",
-    "orientation": "LPI",
-    "slice_order": "down",
-    "slice_direction": 3
-}
-```
-
-### Heuristic file
-
-Edit `code/heuristic.py` to match your scanning protocol. See the [heudiconv documentation](https://heudiconv.readthedocs.io/en/latest/heuristics.html) for details.
 
 ## Commands
 
