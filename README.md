@@ -13,13 +13,13 @@ Create a new conda environment
 conda create -n "dcm2bids" python=3.11
 conda install -c conda-forge heudiconv=1.3.3 (if using local heudiconv)
 conda install -c conda-forge dcm2niix=1.0.20220720
-git clone https://github.com/RioPhillips/7T_BIDS_Organiser.git
 ```
 
 
 ```bash
 # from source
 conda activate dcm2bids
+git clone https://github.com/RioPhillips/7T_BIDS_Organiser.git
 pip install -e .
 
 # or with dev dependencies
