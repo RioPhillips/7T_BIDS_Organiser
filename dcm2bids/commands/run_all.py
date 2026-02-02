@@ -68,7 +68,7 @@ def run_all_steps(
     steps = [
         ("dcm2src", _run_dcm2src),
         ("src2rawdata", _run_src2rawdata),
-        ("b1dcm2rawdata", _run_b1dcm2rawdata),
+        ("b1src2rawdata", _run_b1src2rawdata),
         ("slicetime", _run_slicetime),
         ("reorient", _run_reorient),
         ("fixanat", _run_fixanat),
@@ -167,9 +167,9 @@ def _run_fixepi(studydir, subject, session, dicom_dir, heuristic, force, verbose
     )
 
 
-def _run_b1dcm2rawdata(studydir, subject, session, dicom_dir, heuristic, force, verbose):
-    from dcm2bids.commands.b1dcm2rawdata import run_b1dcm2rawdata
-    run_b1dcm2rawdata(
+def _run_b1src2rawdata(studydir, subject, session, dicom_dir, heuristic, force, verbose):
+    from dcm2bids.commands.b1src2rawdata import run_b1src2rawdata
+    run_b1src2rawdata(
         studydir=studydir,
         subject=subject,
         session=session,

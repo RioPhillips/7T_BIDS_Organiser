@@ -50,7 +50,7 @@ def run_b1src2rawdata(
     """
     sess = Session(studydir, subject, session)
     log_file = sess.paths["logs"] / "b1src2rawdata.log"
-    logger = setup_logging("b1dcm2rawdata", log_file, verbose)
+    logger = setup_logging("b1src2rawdata", log_file, verbose)
     
     logger.info(f"Converting B1 maps for sub-{subject}_ses-{session}")
     

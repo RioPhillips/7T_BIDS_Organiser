@@ -85,7 +85,7 @@ dcm2bids src2rawdata \
     --studydir /path/to/study
 
 # Step 3: Fix B1 maps (if applicable)
-dcm2bids b1dcm2rawdata \
+dcm2bids b1src2rawdata \
     --subject S01 \
     --session MR1 \
     --studydir /path/to/study
@@ -181,7 +181,7 @@ studydir/
 | `fixanat` | Fix anatomical files (MP2RAGE processing) |
 | `fixfmap` | Fix fieldmap files |
 | `fixepi` | Fix EPI JSON metadata |
-| `b1dcm2rawdata` | Import B1 map files |
+| `b1src2rawdata` | Import B1 map files |
 | `reorient` | Reorient images to standard orientation |
 | `slicetime` | Slice timing correction |
 | `validate` | Run BIDS validator |
