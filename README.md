@@ -56,29 +56,30 @@ dcm2bids src2rawdata \
     --session MR1 \
     --studydir /path/to/study
 
-# Step 3: Fix anatomical files (MP2RAGE)
+# Step 3: Fix B1 maps (if applicable)
+dcm2bids b1dcm2rawdata \
+    --subject S01 \
+    --session MR1 \
+    --studydir /path/to/study
+
+# Step 4: Fix anatomical files (MP2RAGE)
 dcm2bids fixanat \
     --subject S01 \
     --session MR1 \
     --studydir /path/to/study
 
-# Step 4: Fix fieldmaps
+# Step 5: Fix fieldmaps
 dcm2bids fixfmap \
     --subject S01 \
     --session MR1 \
     --studydir /path/to/study
 
-# Step 5: Fix EPI metadata
+# Step 6: Fix EPI metadata
 dcm2bids fixepi \
     --subject S01 \
     --session MR1 \
     --studydir /path/to/study
 
-# Step 6: Fix B1 maps (if applicable)
-dcm2bids b1dcm2rawdata \
-    --subject S01 \
-    --session MR1 \
-    --studydir /path/to/study
 
 # Step 7: Reorient images
 dcm2bids reorient \
@@ -215,7 +216,6 @@ done
 ```
 
 ## Troubleshooting
-
 
 ### BIDS validation fails
 
