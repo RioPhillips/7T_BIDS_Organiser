@@ -28,7 +28,7 @@ pip install -e ".[dev]"
 
 ### Other dependencies
 - [FSL](https://fsl.fmrib.ox.ac.uk/fsl/) (for reorientation and slice timing)
-- Docker (for BIDS validator and MRIQC) (optional, you can also use local versions)
+- Docker (for BIDS validator and MRIQC)
 
 ## Quick Start
 
