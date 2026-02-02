@@ -1,3 +1,4 @@
-dcm2bids/__pychache__
+dcm2bids/__pycache__
 dcm2bids.egg-info/
-core/__pychache__
+dcm2bids/core/__pychache__
+dcm2bids/commands/__pycache__
