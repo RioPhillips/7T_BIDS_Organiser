@@ -598,7 +598,7 @@ def status(verbose):
     )
     
     click.echo("dcm2bids status")
-    click.echo("=" * 50)
+    click.echo("=" * 100)
     click.echo(f"Current directory: {Path.cwd()}")
     click.echo("")
     
@@ -621,33 +621,55 @@ def status(verbose):
     click.echo(f"Study dir:     {studydir}")
     click.echo("")
     
-    if verbose:
+    try:
+        config = load_study_config(config_path)
+    except Exception as e:
+        config = {}
+        if verbose:
+            click.echo(f"Warning: Could not load config: {e}")
+            click.echo("")
+    
+    if verbose and config:
         click.echo("Configuration contents:")
         click.echo("-" * 50)
-        try:
-            config = load_study_config(config_path)
-            for key, value in config.items():
-                click.echo(f"  {key}: {value}")
-        except Exception as e:
-            click.echo(f"  Error loading config: {e}")
+        for key, value in config.items():
+            click.echo(f"  {key}: {value}")
         click.echo("")
     
 
+    heuristic_path = None
+    heuristic_display = "code/heuristic.py (not configured)"
+    
+    if "heuristic" in config:
+        heuristic_rel = config["heuristic"]
+        heuristic_path = studydir / heuristic_rel if studydir else None
+        heuristic_display = heuristic_rel
+    elif studydir:
+        code_dir = studydir / "code"
+        if code_dir.exists():
+            patterns = ["*heuristic*.py", "*_heuristic.py", "heuristic_*.py", "heuristic.py"]
+            for pattern in patterns:
+                matches = list(code_dir.glob(pattern))
+                if matches:
+                    heuristic_path = matches[0]
+                    heuristic_display = f"code/{heuristic_path.name} (auto-detected)"
+                    break
+    
     click.echo("Study structure:")
     click.echo("-" * 50)
     
     checks = [
         ("code/config.json", config_path.exists() if config_path else False),
-        ("code/heuristic.py", (studydir / "code" / "heuristic.py").exists() if studydir else False),
+        (heuristic_display, heuristic_path.exists() if heuristic_path else False),
         ("code/mp2rage.json", (studydir / "code" / "mp2rage.json").exists() if studydir else False),
         ("rawdata/", (studydir / "rawdata").exists() if studydir else False),
         ("sourcedata/", (studydir / "sourcedata").exists() if studydir else False),
+        ("derivatives/", (studydir / "derivatives").exists() if studydir else False)
     ]
     
     for name, exists in checks:
         status_mark = "OK!: " if exists else "NOT FOUND: "
         click.echo(f"  {status_mark} {name}")
-
 
 
 # entry point for the CLI

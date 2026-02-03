@@ -10,19 +10,20 @@ A CLI toolkit for converting raw DICOM files from 7T MRI scanners to BIDS-compli
 Create a new conda environment
 
 ```
-conda create -n dcm2bids 
-conda install -c conda-forge heudiconv=1.3.3 (if using local heudiconv)
-conda install -c conda-forge dcm2niix=1.0.20220720
+conda create -n dcm2bids
+conda activate dcm2bids
+conda install -c conda-forge heudiconv
+
+pip install git+https://github.com/RioPhillips/7T_BIDS_Organiser.git
+
 ```
 
 
+Or for editable access
+
 ```bash
-# from source
 conda activate dcm2bids
 git clone https://github.com/RioPhillips/7T_BIDS_Organiser.git
-pip install -e .
-
-# or with dev dependencies
 pip install -e ".[dev]"
 ```
 
