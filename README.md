@@ -175,7 +175,6 @@ studydir/
 
 | Command | Description |
 |---------|-------------|
-| `init` | Initialize a new BIDS study directory |
 | `dcm2src` | Import DICOMs to sourcedata directory |
 | `src2rawdata` | Convert sourcedata to BIDS rawdata using heudiconv |
 | `fixanat` | Fix anatomical files (MP2RAGE processing) |
