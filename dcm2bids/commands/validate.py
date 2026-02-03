@@ -96,6 +96,6 @@ def run_validate(
         logger.warning(f"✗ BIDS Validation FAILED (exit code {result.returncode})")
         logger.info(f"See detailed log: {log_file}")
         
-        
+
         return False
 

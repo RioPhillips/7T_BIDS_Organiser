@@ -171,9 +171,9 @@ def _convert_b1_dir(
         List of created files
     """
     prefix = sess.subses_prefix
-    base_name = f"{prefix}_acq-b1_run-{run}_epi"
+    base_name = f"{prefix}_acq-b1_run-{run}_TB1map"
     
-    # Check if output already exists
+    # checking so output doesnt already exist
     existing = list(fmap_dir.glob(f"{base_name}*.nii.gz"))
     
     if existing and not force:
@@ -181,10 +181,10 @@ def _convert_b1_dir(
         logger.info("Run with --force to reconvert")
         return existing
     
-    # Remove existing files if force
+    # if -force
     if existing and force:
         for f in existing:
-            # Remove from scans.tsv first
+            # remove metadata
             rel_path = f"fmap/{f.name}"
             sess.remove_from_scans_tsv(rel_path)
             
@@ -195,7 +195,7 @@ def _convert_b1_dir(
     
     logger.info(f"Converting B1 run-{run} from {b1_dir.name}")
     
-    # Run dcm2niix
+    # dcm2niix
     # -b y : create BIDS sidecar JSON
     # -z y : compress output
     # -p n : no protocol in filename (we specify our own)
@@ -219,13 +219,13 @@ def _convert_b1_dir(
         logger.error(f"stderr: {result.stderr}")
         raise RuntimeError(f"dcm2niix failed for B1 map: {b1_dir}")
     
-    # Log stdout if verbose (helps with debugging)
-    if result.stdout and logger.level <= 10:  # DEBUG level
+    
+    if result.stdout and logger.level <= 10:
         logger.debug("dcm2niix output:")
         for line in result.stdout.splitlines()[:20]:
             logger.debug(f"  {line}")
     
-    # Collect output files
+    # output files
     created_niftis = sorted(fmap_dir.glob(f"{base_name}*.nii.gz"))
     created_jsons = sorted(fmap_dir.glob(f"{base_name}*.json"))
     
@@ -233,11 +233,11 @@ def _convert_b1_dir(
         logger.warning(f"No NIfTI files created for {b1_dir.name}")
         logger.warning("dcm2niix may have created files with unexpected names")
         
-        # Look for any B1 files created
+        
         all_b1 = sorted(fmap_dir.glob(f"{prefix}_acq-b1_*.nii.gz"))
         if all_b1:
             logger.warning(f"Found {len(all_b1)} B1 files in output:")
-            for f in all_b1[:5]:  # Show first 5
+            for f in all_b1[:5]:  
                 logger.warning(f"  - {f.name}")
             if len(all_b1) > 5:
                 logger.warning(f"  ... and {len(all_b1) - 5} more")
@@ -246,11 +246,11 @@ def _convert_b1_dir(
     
     logger.info(f"  Created {len(created_niftis)} NIfTI + {len(created_jsons)} JSON files")
     
-    # Add created NIfTI files to scans.tsv
+    # adds metadata
     for nii_file in created_niftis:
         rel_path = f"fmap/{nii_file.name}"
         
-        # Try to get acquisition time from the JSON sidecar
+
         acq_time = _get_acq_time_from_json(nii_file, sess, logger)
         
         sess.add_to_scans_tsv(rel_path, acq_time=acq_time)
@@ -283,24 +283,22 @@ def _get_acq_time_from_json(nii_file: Path, sess: Session, logger) -> str:
     try:
         meta = sess.get_json(nii_file)
         
-        # Try different fields that dcm2niix might populate
-        # AcquisitionDateTime is the most complete
+        # different fields that dcm2niix might populate
+
         if "AcquisitionDateTime" in meta:
-            # Format: "2022-12-30T10:27:53.770000"
+            # format: "2022-12-30T10:27:53.770000"
             return meta["AcquisitionDateTime"]
         
-        # Try combining AcquisitionDate and AcquisitionTime
+        # combining AcquisitionDate and AcquisitionTime
         if "AcquisitionDate" in meta and "AcquisitionTime" in meta:
             date = meta["AcquisitionDate"]
             time = meta["AcquisitionTime"]
-            # Handle different date formats
             if len(date) == 8:  # YYYYMMDD
                 date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
             if ":" not in time and len(time) >= 6:  # HHMMSS
                 time = f"{time[:2]}:{time[2:4]}:{time[4:]}"
             return f"{date}T{time}"
         
-        # Try just AcquisitionTime (less ideal but better than n/a)
         if "AcquisitionTime" in meta:
             time = meta["AcquisitionTime"]
             if ":" not in time and len(time) >= 6:
