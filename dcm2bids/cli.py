@@ -63,7 +63,7 @@ def common_options(f):
         '--studydir', '-s',
         type=click.Path(exists=True, file_okay=False, path_type=Path),
         default=None,
-        help='Path to BIDS study directory (default: from config)'
+        help='Path to BIDS study directory (default: auto-detect from CWD)'
     )(f)
     f = click.option(
         '--subject', '-sub',
@@ -107,8 +107,8 @@ def cli():
     
     \b
     SETUP:
-      1. Create your study directory and code/config.json
-      2. Run: dcm2bids init
+      1. Create your study directory with code/config.json
+      2. Run commands from within the study directory tree
     
     \b
     WORKFLOW:
@@ -123,53 +123,15 @@ def cli():
       9. dcm2bids validate          - Run BIDS validator
     
     \b
+    CONFIG DISCOVERY:
+      The package automatically searches for code/config.json starting from
+      your current directory and looking in parent directories. This means
+      you can run commands from anywhere within your study directory tree.
+    
+    \b
     Use 'dcm2bids COMMAND --help' for command-specific help.
     """
     pass
-
-
-
-# init command
-
-
-@cli.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.option(
-    '--config', '-c',
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default=None,
-    help='Path to config.json (default: ./code/config.json)'
-)
-@click.option(
-    '--verbose', '-v',
-    is_flag=True,
-    default=False,
-    help='Enable verbose output'
-)
-def init(config, verbose):
-    """
-    Initialize dcm2bids by registering a study config.
-    
-    \b
-    PREREQUISITES (you must create these first):
-      1. Your study directory (e.g., /path/to/my_study/)
-      2. Config file at <studydir>/code/config.json with:
-         {
-             "studydir": "/path/to/my_study",
-             "heuristic": "code/heuristic.py"
-         }
-    
-    \b
-    USAGE:
-      # From within your study directory:
-      dcm2bids init
-      
-      # Or specify config location:
-      dcm2bids init --config /path/to/config.json
-    
-    After initialization, --studydir is no longer required for other commands.
-    """
-    from dcm2bids.commands.init_study import run_init
-    run_init(config=config, verbose=verbose)
 
 
 
@@ -569,7 +531,7 @@ def run_all(studydir, subject, session, force, verbose, dicom_dir, heuristic,
     '--studydir', '-s',
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
-    help='Path to BIDS study directory (default: from config)'
+    help='Path to BIDS study directory (default: auto-detect from CWD)'
 )
 @click.option(
     '--heuristic', '-H',
@@ -626,46 +588,65 @@ def status(verbose):
     """
     Show current dcm2bids configuration status.
     
-    Displays the active study directory and configuration.
+    Displays the detected study directory and configuration based on
+    the current working directory.
     """
     from dcm2bids.core import (
-        get_active_config_path,
+        find_config_from_cwd,
+        find_studydir_from_cwd,
         load_study_config,
-        get_studydir,
-        SETTINGS_FILE,
     )
     
     click.echo("dcm2bids status")
-    click.echo("=" * 40)
+    click.echo("=" * 50)
+    click.echo(f"Current directory: {Path.cwd()}")
+    click.echo("")
     
-    config_path = get_active_config_path()
+    config_path = find_config_from_cwd()
     
     if config_path is None:
+        click.echo("No code/config.json found in current directory or parents.")
         click.echo("")
-        click.echo("No active configuration.")
+        click.echo("To use dcm2bids:")
+        click.echo("  1. Create your study directory (e.g., /path/to/my_study/)")
+        click.echo("  2. Create code/config.json with your settings")
+        click.echo("  3. Run commands from within the study directory tree")
         click.echo("")
-        click.echo("Run 'dcm2bids init' to register a study.")
+        click.echo("Or use '--studydir /path/to/study' with any command.")
         return
     
-    click.echo(f"Settings file: {SETTINGS_FILE}")
-    click.echo(f"Config file:   {config_path}")
+    studydir = find_studydir_from_cwd()
     
-    try:
-        studydir = get_studydir()
-        click.echo(f"Study dir:     {studydir}")
-    except (KeyError, FileNotFoundError) as e:
-        click.echo(f"Study dir:     ERROR - {e}")
+    click.echo(f"Config found:  {config_path}")
+    click.echo(f"Study dir:     {studydir}")
+    click.echo("")
     
     if verbose:
-        click.echo("")
-        click.echo("Full configuration:")
-        click.echo("-" * 40)
+        click.echo("Configuration contents:")
+        click.echo("-" * 50)
         try:
-            config = load_study_config()
+            config = load_study_config(config_path)
             for key, value in config.items():
                 click.echo(f"  {key}: {value}")
         except Exception as e:
             click.echo(f"  Error loading config: {e}")
+        click.echo("")
+    
+
+    click.echo("Study structure:")
+    click.echo("-" * 50)
+    
+    checks = [
+        ("code/config.json", config_path.exists() if config_path else False),
+        ("code/heuristic.py", (studydir / "code" / "heuristic.py").exists() if studydir else False),
+        ("code/mp2rage.json", (studydir / "code" / "mp2rage.json").exists() if studydir else False),
+        ("rawdata/", (studydir / "rawdata").exists() if studydir else False),
+        ("sourcedata/", (studydir / "sourcedata").exists() if studydir else False),
+    ]
+    
+    for name, exists in checks:
+        status_mark = "OK!: " if exists else "NOT FOUND: "
+        click.echo(f"  {status_mark} {name}")
 
 
 

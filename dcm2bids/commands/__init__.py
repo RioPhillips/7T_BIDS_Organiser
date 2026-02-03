@@ -11,7 +11,6 @@ from .slicetime import run_slicetime
 from .validate import run_validate
 from .qc import run_qc
 from .run_all import run_all_steps
-from .init_study import run_init
 from .populate_templates import run_populate_templates
 
 __all__ = [
@@ -26,6 +25,5 @@ __all__ = [
     "run_validate",
     "run_qc",
     "run_all_steps",
-    "run_init",
     "run_populate_templates"
 ]

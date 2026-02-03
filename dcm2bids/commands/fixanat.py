@@ -442,7 +442,7 @@ def _reshape_unit1(anat_dir: Path, sess: Session, logger, run: int) -> None:
     data = nii.get_fdata()
     
     # check if dummy dimension exists 
-    # if it does, find it and remove
+    # if it does, find it and squeeze
     if data.ndim == 4 and 1 in data.shape:
         logger.info(f"Reshaping T1w from {data.shape} to 3D")
         

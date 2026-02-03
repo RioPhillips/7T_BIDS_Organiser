@@ -2,7 +2,13 @@
 
 from .session import Session, load_config, get_heuristic_path
 from .utils import setup_logging, run_command, check_outputs_exist, find_files, get_docker_user_args
-from .settings import SETTINGS_FILE, resolve_studydir, set_active_config, load_study_config, get_studydir
+from .config import (
+    resolve_studydir,
+    load_study_config,
+    get_studydir,
+    find_config_from_cwd,
+    find_studydir_from_cwd,
+)
 
 __all__ = [
     "Session",
@@ -13,9 +19,9 @@ __all__ = [
     "check_outputs_exist",
     "find_files",
     "get_docker_user_args",
-    "SETTINGS_FILE",
     "resolve_studydir",
-    "set_active_config",
     "load_study_config",
-    "get_studydir"
+    "get_studydir",
+    "find_config_from_cwd",
+    "find_studydir_from_cwd",
 ]
