@@ -230,7 +230,7 @@ def _rename_gre_files(
         dst_json = Path(f"{dst_prefix}.json")
         
         if not src_nii.exists():
-            continue  # Silent skip
+            continue 
         
         found_any = True
         
@@ -259,11 +259,6 @@ def _rename_gre_files(
 def _add_units_to_fieldmaps(fmap_dir: Path, sess: Session, logger, run: int) -> None:
     """
     Add Units field to fieldmap JSONs (GRE and B0).
-    
-    BIDS requires Units field for fieldmaps. Common values:
-      - "rad/s" for phase difference maps
-      - "Hz" for frequency maps
-      - "T" for Tesla
     """
     prefix = sess.subses_prefix
     
