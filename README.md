@@ -179,7 +179,8 @@ studydir/
     │           ├── dcm2src.log
     │           ├── src2rawdata.log
     │           └── ...
-    └── mriqc/
+    └── qc/
+        └── mriqc/
 ```
 
 
