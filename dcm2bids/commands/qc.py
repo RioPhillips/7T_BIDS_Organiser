@@ -1,12 +1,12 @@
 """
 qc command - Run MRIQC quality control.
 
-Uses the MRIQC Docker container to generate quality control reports
-for the participant's imaging data.
 """
 
 import subprocess
+import shutil
 from pathlib import Path
+from typing import List, Optional
 
 from dcm2bids.core import Session, setup_logging, get_docker_user_args
 
@@ -15,7 +15,9 @@ def run_qc(
     studydir: Path,
     subject: str,
     session: str,
-    mem_gb: int = 6,
+    modalities: Optional[List[str]] = None,
+    mem_gb: int = 8,
+    n_procs: int = 4,
     force: bool = False,
     verbose: bool = False
 ) -> bool:
@@ -30,8 +32,12 @@ def run_qc(
         Subject ID (without sub- prefix)
     session : str
         Session ID (without ses- prefix)
+    modalities : list, optional
+        Modalities to process (T1w, T2w, bold, dwi). If None, auto-detect.
     mem_gb : int
-        Memory limit in GB (default: 6)
+        Memory limit in GB (default: 8)
+    n_procs : int
+        Number of parallel processes (default: 4)
     force : bool
         Force re-run QC
     verbose : bool
@@ -43,54 +49,72 @@ def run_qc(
         True if QC completed successfully
     """
     sess = Session(studydir, subject, session)
-    log_file = sess.paths["logs"] / "mriqc.log"
+    
+    #  directories
+    mriqc_out = sess.studydir / "derivatives" / "qc" / "mriqc"
+    mriqc_work = mriqc_out / "work" / f"sub-{subject}_ses-{session}"
+    mriqc_logs = mriqc_out / "logs"
+    
+    log_file = mriqc_logs / f"sub-{subject}_ses-{session}_mriqc.log"
+    mriqc_logs.mkdir(parents=True, exist_ok=True)
+    
     logger = setup_logging("qc", log_file, verbose)
     
     rawdata_root = sess.studydir / "rawdata"
-    mriqc_out = sess.studydir / "derivatives" / "mriqc"
+    session_dir = rawdata_root / f"sub-{subject}" / f"ses-{session}"
     
-    if not rawdata_root.exists():
-        logger.error(f"rawdata directory not found: {rawdata_root}")
+    if not session_dir.exists():
+        logger.error(f"Session directory not found: {session_dir}")
         return False
     
     logger.info(f"Running MRIQC for sub-{subject}_ses-{session}")
     
-    # check existing output
-    subj_html = mriqc_out / f"sub-{subject}" / f"ses-{session}"
-    if subj_html.exists() and any(subj_html.glob("*.html")) and not force:
-        logger.info(f"MRIQC reports already exist: {subj_html}")
-        logger.info("Run with --force to regenerate")
+    # existing output
+    subj_out = mriqc_out / f"sub-{subject}"
+    if subj_out.exists() and any(subj_out.rglob("*.html")) and not force:
+        logger.info(f"MRIQC reports already exist. Use --force to regenerate.")
         return True
     
-    # output directory
+    # find modalities if not specified
+    if modalities is None:
+        modalities = _detect_modalities(session_dir, logger)
+    
+    if not modalities:
+        logger.warning("No processable modalities found (T1w, T2w, bold, dwi)")
+        return True
+    
+    logger.info(f"Modalities: {modalities}")
+    
+    # directories
     mriqc_out.mkdir(parents=True, exist_ok=True)
+    mriqc_work.mkdir(parents=True, exist_ok=True)
     
     # docker command
     user_args = get_docker_user_args()
     
     cmd = [
         "docker", "run", "--rm",
-        "--read-only",
-        "--tmpfs", "/tmp",
-        "--tmpfs", "/run",
         *user_args,
         "--volume", f"{rawdata_root}:/data:ro",
         "--volume", f"{mriqc_out}:/out",
+        "--volume", f"{mriqc_work}:/work",
         "nipreps/mriqc:latest",
         "/data",
         "/out",
         "participant",
-        "--participant_label", subject,
+        "--participant-label", subject,
         "--session-id", session,
+        "-w", "/work",
         "--verbose-reports",
-        "--mem_gb", str(mem_gb)
+        "--mem_gb", str(mem_gb),
+        "--nprocs", str(n_procs),
+        "--no-sub",
+        "--modalities", *modalities,
     ]
     
     logger.debug(f"Command: {' '.join(cmd)}")
     
-    # run mriqc
-    sess.paths["logs"].mkdir(parents=True, exist_ok=True)
-    
+    # run MRIQC
     with open(log_file, "w") as logf:
         result = subprocess.run(cmd, stdout=logf, stderr=subprocess.STDOUT)
     
@@ -99,7 +123,31 @@ def run_qc(
         logger.error(f"See log: {log_file}")
         return False
     
-    logger.info("✓ MRIQC completed successfully")
-    logger.info(f"Reports: {mriqc_out}")
+    # clean work directory
+    if mriqc_work.exists():
+        shutil.rmtree(mriqc_work, ignore_errors=True)
     
+    logger.info("MRIQC completed successfully!")
     return True
+
+
+def _detect_modalities(session_dir: Path, logger) -> List[str]:
+    """Detect available modalities for MRIQC."""
+    modalities = []
+    
+    anat_dir = session_dir / "anat"
+    if anat_dir.exists():
+        t1w = [f for f in anat_dir.glob("*_T1w.nii.gz") 
+               if "inv-" not in f.name and "part-" not in f.name]
+        if t1w:
+            modalities.append("T1w")
+        if list(anat_dir.glob("*_T2w.nii.gz")):
+            modalities.append("T2w")
+    
+    if (session_dir / "func").exists() and list((session_dir / "func").glob("*_bold.nii.gz")):
+        modalities.append("bold")
+    
+    if (session_dir / "dwi").exists() and list((session_dir / "dwi").glob("*_dwi.nii.gz")):
+        modalities.append("dwi")
+    
+    return modalities

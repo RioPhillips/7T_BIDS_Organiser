@@ -443,20 +443,17 @@ def validate(studydir, subject, session, force, verbose):
 
 # qc command (MRIQC)
 
-
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-@click.option(
-    '--mem-gb',
-    type=int,
-    default=6,
-    help='Memory limit in GB for MRIQC (default: 6)'
-)
-def qc(studydir, subject, session, force, verbose, mem_gb):
+@click.option('--mem-gb', type=int, default=8, help='Memory limit in GB (default: 8)')
+@click.option('--n-procs', type=int, default=4, help='Number of parallel processes (default: 4)')
+@click.option('--modalities', '-m', type=str, multiple=True, default=None,
+              help='Modalities to process (T1w, T2w, bold, dwi). Auto-detects if not specified.')
+def qc(studydir, subject, session, force, verbose, mem_gb, n_procs, modalities):
     """
     Run MRIQC quality control.
     
-    Uses the MRIQC Docker container to generate quality control reports.
+    Generates quality control reports for T1w, T2w, BOLD, and DWI data.
     """
     studydir = resolve_studydir(studydir)
     from dcm2bids.commands.qc import run_qc
@@ -464,12 +461,12 @@ def qc(studydir, subject, session, force, verbose, mem_gb):
         studydir=studydir,
         subject=subject,
         session=session,
+        modalities=list(modalities) if modalities else None,
         mem_gb=mem_gb,
+        n_procs=n_procs,
         force=force,
         verbose=verbose
     )
-
-
 
 # run-all command
 
