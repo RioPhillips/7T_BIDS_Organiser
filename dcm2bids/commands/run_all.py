@@ -68,7 +68,7 @@ def run_all_steps(
     steps = [
         ("dcm2src", _run_dcm2src),
         ("src2rawdata", _run_src2rawdata),
-        ("b1src2rawdata", _run_b1src2rawdata),
+        #("b1src2rawdata", _run_b1src2rawdata),
         ("slicetime", _run_slicetime),
         ("reorient", _run_reorient),
         ("fixanat", _run_fixanat),
