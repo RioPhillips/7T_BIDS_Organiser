@@ -98,7 +98,7 @@ def run_all_steps(
                 force=force,
                 verbose=verbose
             )
-            logger.info(f"✓ {step_name} completed")
+            logger.info(f"{step_name} completed")
         except Exception as e:
             logger.error(f"✗ {step_name} failed: {e}")
             logger.error("Stopping pipeline")

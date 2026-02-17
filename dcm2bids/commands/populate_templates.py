@@ -110,7 +110,7 @@ def run_populate_templates(
         fpath = rawdata_root / fname
         if fpath.exists():
             created_files.append(fname)
-            logger.info(f"  ✓ {fname}")
+            logger.info(f"  {fname}")
     
     # just check
     participants_tsv = rawdata_root / "participants.tsv"
@@ -120,4 +120,4 @@ def run_populate_templates(
         logger.warning("You must create this file manually with columns:")
         logger.warning("  participant_id\\tage\\tsex")
     else:
-        logger.info("  ✓ participants.tsv (already exists)")
+        logger.info("  participants.tsv (already exists)")

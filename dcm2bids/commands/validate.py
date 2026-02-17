@@ -90,7 +90,7 @@ def run_validate(
     
 
     if result.returncode == 0:
-        logger.info("✓ BIDS Validation PASSED")
+        logger.info("BIDS Validation PASSED")
         return True
     else:
         logger.warning(f"✗ BIDS Validation FAILED (exit code {result.returncode})")
