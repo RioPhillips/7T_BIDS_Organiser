@@ -91,7 +91,7 @@ def _correct_slicetiming(
     logger
 ) -> bool:
     """
-    Apply slice timing correction to a single BOLD file.
+    Applies slice timing correction to a single BOLD file.
     
     Returns True if processed, False if skipped.
     """

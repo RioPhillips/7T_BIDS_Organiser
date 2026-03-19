@@ -1,6 +1,6 @@
-"""
-Session class for managing subject/session paths and file operations.
-"""
+
+# session class for managing subject/session paths and file operations.
+
 
 from pathlib import Path
 import json
