@@ -42,21 +42,20 @@ pip install -e ".[dev]"
 **Included in package:**
 
 | Dependency |
-|-----------|---------|---------|
-| dcm2niix | `conda install -c conda-forge dcm2niix`
+|---------|
+| dcm2niix |
 | clickCLI framework |
-| nibabel
-| numpy 
-| pydicom 
-| pyyaml 
+| nibabel |
+| numpy |
+| pydicom |
+| pyyaml |
 
 **Optional:**
 
-| Dependency | Install | Used by | Notes |
-|-----------|---------|---------|-------|
-| FSL | [fsl.fmrib.ox.ac.uk](https://fsl.fmrib.ox.ac.uk/fsl/) | `fslswapdim` and `slicetimer` must be on PATH |
-| Docker | [docker.com](https://www.docker.com/) | For BIDS validator and MRIQC containers |
-| unzip | Usually pre-installed on Linux | Only needed if importing from zip files |
+| Dependency | 
+|-----------|
+| FSL |
+| Docker (For BIDS validator and MRIQC containers)|
 
 The pipeline works without FSL and Docker. The minimum viable setup is just dcm2niix + the Python packages.
 
@@ -156,7 +155,7 @@ FlipAngle: [6, 8]
 ```bash
 cd /path/to/my_study
 
-# Initialize BIDS scaffolding (once per study)
+# Initialize BIDS scaffolding
 bids7t init
 
 # Process a subject
