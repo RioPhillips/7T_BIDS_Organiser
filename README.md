@@ -1,259 +1,265 @@
-# dcm2bids
+# bids7t
 
 DICOM to BIDS conversion tools for 7T MRI data.
 
-A CLI toolkit for converting raw DICOM files from 7T MRI scanners to BIDS-compliant directory structures.
+Converts raw DICOM files from Philips 7T MRI scanners to BIDS-compliant
+directory structures using dcm2niix directly. No heudiconv dependency.
 
+## Installation
 
-## Installation setup
-
-Create a new conda environment
-
-```
-conda create -n dcm2bids
-conda activate dcm2bids
-conda install -c conda-forge heudiconv
-
-pip install git+https://github.com/RioPhillips/7T_BIDS_Organiser.git
-
-```
-
-
-Or for editable access
+### Standalone install (most users)
 
 ```bash
-conda activate dcm2bids
+# 1. Create environment with dcm2niix
+conda create -n bids7t python=3.11
+conda activate bids7t
+conda install -c conda-forge dcm2niix
+
+# 2. Install bids7t
+pip install git+https://github.com/RioPhillips/7T_BIDS_Organiser.git
+```
+
+Or in one step using the environment file from the repo:
+
+```bash
+conda env create -f https://raw.githubusercontent.com/RioPhillips/7T_BIDS_Organiser/main/environment.yml
+conda activate bids7t
+```
+
+### Development install
+
+```bash
 git clone https://github.com/RioPhillips/7T_BIDS_Organiser.git
+cd 7T_BIDS_Organiser
+conda create -n bids7t python=3.11
+conda activate bids7t
+conda install -c conda-forge dcm2niix
 pip install -e ".[dev]"
 ```
 
-### Other dependencies
-- [FSL](https://fsl.fmrib.ox.ac.uk/fsl/) (for reorientation and slice timing)
-- Docker (for BIDS validator and MRIQC)
+### Dependencies
+
+**Required — core conversion will not work without these:**
+
+| Dependency | Install | Used by |
+|-----------|---------|---------|
+| dcm2niix | `conda install -c conda-forge dcm2niix` | `dcm2src`, `src2rawdata` |
+| click | automatic via pip | CLI framework |
+| nibabel | automatic via pip | `fixanat`, `reorient`, `slicetime` |
+| numpy | automatic via pip | `fixanat` (mag/phase computation) |
+| pydicom | automatic via pip | `fixepi`, `src2rawdata` (DICOM metadata) |
+| pyyaml | automatic via pip | Config loading (`bids7t.yaml`) |
+
+**Optional — only needed for specific commands:**
+
+| Dependency | Install | Used by | Notes |
+|-----------|---------|---------|-------|
+| FSL | [fsl.fmrib.ox.ac.uk](https://fsl.fmrib.ox.ac.uk/fsl/) | `reorient`, `slicetime` | `fslswapdim` and `slicetimer` must be on PATH |
+| Docker | [docker.com](https://www.docker.com/) | `bids7t validate`, `bids7t qc` | For BIDS validator and MRIQC containers |
+| unzip | Usually pre-installed on Linux | `dcm2src` | Only needed if importing from zip files |
+
+The pipeline works without FSL and Docker — those commands simply skip gracefully if the tools aren't available. The minimum viable setup is just dcm2niix + the Python packages.
 
 ## Quick Start
 
-### Set up your study directory
-
-Create your study directory with a `code/` folder containing the configuration files:
-
-```
-my_study/
-├── code/
-│   ├── config.json          # Study configuration (required)
-│   ├── mp2rage.json         # MP2RAGE metadata file
-│   └── heuristic.py         # Heudiconv heuristic file
-```
-
-#### code/config.json
-```json
-{
-    "studydir": "/path/to/my_study",
-    "heuristic": "code/heuristic.py",
-    "epi_ap_phase_enc_dir": "j-",
-    "orientation": "LPI",
-    "slice_order": "down",
-    "slice_direction": 3
-}
-```
-
-Note: The `studydir` field is optional if you always run commands from within the study directory tree. The package will automatically detect the study directory by searching for `code/config.json`.
-
-#### code/mp2rage.json
-```json
-{
-    "RepetitionTimeExcitation": 0.006,
-    "RepetitionTimePreparation": 5,
-    "InversionTime": [0.9, 2.0],
-    "NumberShots": 128,
-    "FlipAngle": [6, 8]
-}
-```
-This file contains BIDS-required metadata for the MP2RAGE files. Adjust these parameters to match your specific protocol.
-
-#### Heuristic file
-
-Create `code/heuristic.py` (or use an existing one) to match your scanning protocol. See the [heudiconv documentation](https://heudiconv.readthedocs.io/en/latest/heuristics.html) for details.
-
-### Config Auto-Discovery
-
-The package automatically searches for `code/config.json` starting from your current working directory and traversing up the directory tree. This means you can run commands from:
-
-- The study root directory (`/path/to/my_study/`)
-- Any subdirectory (`/path/to/my_study/rawdata/sub-01/`)
-- Or explicitly specify: `--studydir /path/to/my_study`
-
-Check the detected configuration with:
-```bash
-dcm2bids status
-```
-
-### Convert a single subject/session
+### 1. Set up study directory
 
 ```bash
-# Navigate to your study directory (or any subdirectory)
+mkdir -p my_study/code
+cd my_study
+```
+
+### 2. Create `code/bids7t.yaml`
+
+This single file contains study settings and series-to-BIDS mapping rules.
+Copy one of the templates below and adjust the `dir_pattern` regexes to
+match your sourcedata directory names.
+
+<details>
+<summary>Template for single-session Philips 7T study</summary>
+
+```yaml
+studydir: /path/to/my_study
+
+epi_ap_phase_enc_dir: "j-"
+orientation: LPI
+slice_order: down
+slice_direction: 3
+
+series:
+  - name: MP2RAGE real
+    match: {dir_pattern: '\d+_real$', exclude_derived: true}
+    target: anat
+    suffix: MP2RAGE
+    entities: {inv: 1and2, part: real}
+
+  - name: MP2RAGE imag
+    match: {dir_pattern: '\d+_imag$', exclude_derived: true}
+    target: anat
+    suffix: MP2RAGE
+    entities: {inv: 1and2, part: imag}
+
+  - name: MP2RAGE magnitude
+    match: {dir_pattern: T1w_acq-mp2rage}
+    target: anat
+    suffix: MP2RAGE
+    entities: {inv: 1and2}
+
+  - name: FLAIR
+    match: {dir_pattern: FLAIR}
+    target: anat
+    suffix: FLAIR
+
+  - name: B1 map (dual TR)
+    match: {dir_pattern: B1map_dual_TR}
+    target: fmap
+    suffix: TB1map
+    entities: {acq: b1}
+    dcm2niix_flags: ["-p", "n"]
+
+  - name: fMRI task
+    match: {dir_pattern: fmri_8bars_dir-AP}
+    target: func
+    suffix: bold
+    entities: {task: 8bars, dir: AP}
+
+  - name: DWI AP
+    match: {dir_pattern: 'dmri.*dir-AP', exclude_derived: true}
+    target: dwi
+    suffix: dwi
+    entities: {dir: AP}
+
+  - name: DWI PA
+    match: {dir_pattern: 'dmri.*dir-PA', exclude_derived: true}
+    target: dwi
+    suffix: dwi
+    entities: {dir: PA}
+```
+</details>
+
+Full example configs for both 7T049 and 7T079 studies are in the
+[examples/](https://github.com/RioPhillips/7T_BIDS_Organiser/tree/main/examples)
+directory of the repository.
+
+### 3. Create `code/mp2rage.yaml` (if using MP2RAGE)
+
+```yaml
+RepetitionTimeExcitation: 0.006
+RepetitionTimePreparation: 5
+InversionTime: [0.9, 2.0]
+NumberShots: 128
+FlipAngle: [6, 8]
+```
+
+### 4. Run
+
+```bash
 cd /path/to/my_study
 
-# Step 1: Import DICOMs to sourcedata
-dcm2bids dcm2src \
-    --subject S01 \
-    --session MR1 \
-    --dicom-dir /path/to/dicoms
+# Initialize BIDS scaffolding (once per study)
+init
 
-# Step 2: Convert to BIDS with heudiconv
-dcm2bids src2rawdata \
-    --subject S01 \
-    --session MR1
+# Process a subject (single-session study)
+run-all --subject 7T049S14 --dicom-dir /path/to/dicoms
 
-# Step 3: Fix B1 maps (if applicable)
-dcm2bids b1src2rawdata \
-    --subject S01 \
-    --session MR1
-
-# Step 4: Fix anatomical files (MP2RAGE)
-dcm2bids fixanat \
-    --subject S01 \
-    --session MR1
-
-# Step 5: Fix fieldmaps
-dcm2bids fixfmap \
-    --subject S01 \
-    --session MR1
-
-# Step 6: Fix EPI metadata
-dcm2bids fixepi \
-    --subject S01 \
-    --session MR1
-
-# Step 7: Reorient images
-dcm2bids reorient \
-    --subject S01 \
-    --session MR1
-
-# Step 8: Slice timing correction
-dcm2bids slicetime \
-    --subject S01 \
-    --session MR1
-
-# Step 9: Validate BIDS compliance
-dcm2bids validate \
-    --subject S01 \
-    --session MR1
+# Process a subject (multi-session study)
+run-all --subject S01 --session MR1 --dicom-dir /path/to/dicoms
 ```
 
-### Or run all steps at once
+Or step by step:
 
 ```bash
-dcm2bids run-all \
-    --subject S01 \
-    --session MR1 \
-    --dicom-dir /path/to/dicoms
+dcm2src --subject S01 --dicom-dir /path/to/S01.zip
+src2rawdata --subject S01
+fixanat --subject S01
+fixfmap --subject S01
+fixepi --subject S01
+reorient --subject S01
+slicetime --subject S01
 ```
-
-## Directory Structure
-
-```
-studydir/
-├── code/
-│   ├── config.json          # Study configuration
-│   ├── mp2rage.json         # MP2RAGE metadata file
-│   └── heuristic.py         # Heudiconv heuristic file
-├── sourcedata/
-│   └── sub-S01/
-│       └── ses-MR1/
-│           └── <series_name>/*.dcm
-├── rawdata/
-│   ├── dataset_description.json
-│   ├── participants.tsv
-│   └── sub-S01/
-│       └── ses-MR1/
-│           ├── anat/
-│           ├── func/
-│           ├── fmap/
-│           ├── dwi/
-│           └── sub-S01_ses-MR1_scans.tsv
-└── derivatives/
-    ├── logs/
-    │   └── sub-S01/
-    │       └── ses-MR1/
-    │           ├── dcm2src.log
-    │           ├── src2rawdata.log
-    │           └── ...
-    └── qc/
-        └── mriqc/
-```
-
 
 ## Commands
 
+All commands can be called directly (no prefix needed) or via the `bids7t` group:
+
 | Command | Description |
 |---------|-------------|
-| `status` | Show detected study configuration |
-| `dcm2src` | Import DICOMs to sourcedata directory |
-| `src2rawdata` | Convert sourcedata to BIDS rawdata using heudiconv |
-| `fixanat` | Fix anatomical files (MP2RAGE processing) |
-| `fixfmap` | Fix fieldmap files |
-| `fixepi` | Fix EPI JSON metadata |
-| `b1src2rawdata` | Import B1 map files |
+| `init` | Create BIDS scaffolding files (once per study) |
+| `dcm2src` | Import DICOMs to sourcedata (handles zip files) |
+| `src2rawdata` | Convert sourcedata to BIDS rawdata using dcm2niix |
+| `fixanat` | Fix MP2RAGE files (split, mag/phase, metadata) |
+| `fixfmap` | Fix fieldmap files (B0, B1/DREAM, GRE naming) |
+| `fixepi` | Fix EPI metadata (PhaseEncodingDirection, TotalReadoutTime) |
 | `reorient` | Reorient images to standard orientation |
 | `slicetime` | Slice timing correction |
-| `validate` | Run BIDS validator |
-| `qc` | Run MRIQC quality control |
-| `run-all` | Run all conversion steps in sequence |
-| `populate-templates` | Create top-level BIDS files after batch processing |
+| `run-all` | Run all steps in sequence |
+| `bids7t validate` | Run BIDS validator (Docker) |
+| `bids7t qc` | Run MRIQC quality control (Docker) |
+| `bids7t status` | Show study configuration |
 
 ## Common Options
 
-All commands support these options:
-
 | Option | Description |
 |--------|-------------|
-| `--studydir`, `-s` | Path to the BIDS study directory (auto-detected if not provided) |
+| `--studydir`, `-s` | Path to study directory (auto-detected from CWD) |
 | `--subject`, `-sub` | Subject ID (without sub- prefix) |
-| `--session`, `-ses` | Session ID (without ses- prefix) |
+| `--session`, `-ses` | Session ID (optional, for multi-session studies) |
 | `--force`, `-f` | Force overwrite existing files |
 | `--verbose`, `-v` | Enable verbose output |
 
-## Batch Processing
+## Session Support
 
-Create a bash script to process multiple subjects:
+`--session` is optional. Omit it for single-session studies.
+
+**With session:** `src2rawdata --subject S01 --session MR1`
+```
+rawdata/sub-S01/ses-MR1/anat/sub-S01_ses-MR1_run-1_T1w.nii.gz
+```
+
+**Without session:** `src2rawdata --subject 7T049S14`
+```
+rawdata/sub-7T049S14/anat/sub-7T049S14_run-1_T1w.nii.gz
+```
+
+## Series Mapping Reference
+
+Each rule in the `series:` section of `bids7t.yaml` has:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | No | Human-readable label (for logs) |
+| `match.dir_pattern` | Yes | Regex matched against sourcedata directory name |
+| `match.exclude_derived` | No | Skip if DICOM ImageType contains DERIVED |
+| `match.require_derived` | No | Only match if DICOM ImageType contains DERIVED |
+| `match.dicom_field` | No | Dict of DICOM field name → regex to check |
+| `target` | Yes | BIDS directory: `anat`, `func`, `fmap`, `dwi` |
+| `suffix` | Yes | BIDS suffix: `T1w`, `bold`, `TB1map`, `dwi`, etc. |
+| `entities` | No | BIDS entities: `{task: 8bars, dir: AP, acq: b1}` |
+| `dcm2niix_flags` | No | Extra dcm2niix flags: `["-p", "n"]` |
+
+Run numbers are assigned automatically per unique target+suffix+entities combination.
+
+## Batch Processing
 
 ```bash
 #!/bin/bash
+cd /path/to/study
 
-STUDYDIR=/path/to/study
-DICOM_ROOT=/path/to/dicoms
-
-cd $STUDYDIR  # Change to study directory for auto-detection
-
-# List of subjects
 SUBJECTS=(S01 S02 S03)
-SESSIONS=(MR1 MR2)
 
 for SUB in "${SUBJECTS[@]}"; do
-    for SES in "${SESSIONS[@]}"; do
-        echo "Processing sub-${SUB}_ses-${SES}"
-        
-        dcm2bids run-all \
-            --subject ${SUB} \
-            --session ${SES} \
-            --dicom-dir ${DICOM_ROOT}/${SUB}/${SES}
-    done
+    echo "Processing sub-${SUB}"
+    run-all --subject ${SUB} --dicom-dir /dicoms/${SUB}.zip
 done
 ```
 
-## Troubleshooting
+## Why not heudiconv?
 
-### Config not found
+Heudiconv has a fundamental limitation with Philips multi-output sequences.
+When dcm2niix produces multiple files from one DICOM series (e.g., Philips DREAM
+B1 maps produce 6 sub-series), heudiconv's `tuneup_bids_json_files()` can crash
+with an `AssertionError` because it tries to stamp the same JSON file twice.
 
-If you see "Could not find code/config.json", make sure you're running from within the study directory tree, or use `--studydir` to specify the path explicitly.
-
-### BIDS validation fails
-
-Check the validation log at `derivatives/logs/sub-*/ses-*/validate.log` for details.
-
-### Heudiconv fails
-
-1. Check that your heuristic file matches your protocol
-2. Look at the log: `derivatives/logs/sub-*/ses-*/heudiconv.log`
-3. Run heudiconv with `-c none` first to inspect the dicominfo.tsv
+bids7t calls dcm2niix directly per series with full control over flags, avoiding
+this issue entirely. The `dcm2niix_flags` field in the series mapping lets you
+pass per-series options like `-p n` for Philips fieldmaps.
