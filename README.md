@@ -43,17 +43,17 @@ pip install -e ".[dev]"
 
 | Dependency |
 |---------|
-| dcm2niix |
 | clickCLI framework |
 | nibabel |
 | numpy |
 | pydicom |
 | pyyaml |
 
-**Optional:**
+**Other:**
 
 | Dependency | 
 |-----------|
+| dcm2niix |
 | FSL |
 | Docker (For BIDS validator and MRIQC containers)|
 
