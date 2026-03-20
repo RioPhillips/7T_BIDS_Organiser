@@ -3,11 +3,11 @@
 DICOM to BIDS conversion tools for 7T MRI data.
 
 Converts raw DICOM files from Philips 7T MRI scanners to BIDS-compliant
-directory structures using dcm2niix directly. No heudiconv dependency.
+directory structures using dcm2niix directly. 
 
 ## Installation
 
-### Standalone install (most users)
+### Standalone install 
 
 ```bash
 # 1. Create environment with dcm2niix
@@ -26,7 +26,7 @@ conda env create -f https://raw.githubusercontent.com/RioPhillips/7T_BIDS_Organi
 conda activate bids7t
 ```
 
-### Development install
+### Dev install
 
 ```bash
 git clone https://github.com/RioPhillips/7T_BIDS_Organiser.git
@@ -39,26 +39,26 @@ pip install -e ".[dev]"
 
 ### Dependencies
 
-**Required — core conversion will not work without these:**
+**Included in package:**
 
-| Dependency | Install | Used by |
+| Dependency |
 |-----------|---------|---------|
-| dcm2niix | `conda install -c conda-forge dcm2niix` | `dcm2src`, `src2rawdata` |
-| click | automatic via pip | CLI framework |
-| nibabel | automatic via pip | `fixanat`, `reorient`, `slicetime` |
-| numpy | automatic via pip | `fixanat` (mag/phase computation) |
-| pydicom | automatic via pip | `fixepi`, `src2rawdata` (DICOM metadata) |
-| pyyaml | automatic via pip | Config loading (`bids7t.yaml`) |
+| dcm2niix | `conda install -c conda-forge dcm2niix`
+| clickCLI framework |
+| nibabel
+| numpy 
+| pydicom 
+| pyyaml 
 
-**Optional — only needed for specific commands:**
+**Optional:**
 
 | Dependency | Install | Used by | Notes |
 |-----------|---------|---------|-------|
-| FSL | [fsl.fmrib.ox.ac.uk](https://fsl.fmrib.ox.ac.uk/fsl/) | `reorient`, `slicetime` | `fslswapdim` and `slicetimer` must be on PATH |
-| Docker | [docker.com](https://www.docker.com/) | `bids7t validate`, `bids7t qc` | For BIDS validator and MRIQC containers |
-| unzip | Usually pre-installed on Linux | `dcm2src` | Only needed if importing from zip files |
+| FSL | [fsl.fmrib.ox.ac.uk](https://fsl.fmrib.ox.ac.uk/fsl/) | `fslswapdim` and `slicetimer` must be on PATH |
+| Docker | [docker.com](https://www.docker.com/) | For BIDS validator and MRIQC containers |
+| unzip | Usually pre-installed on Linux | Only needed if importing from zip files |
 
-The pipeline works without FSL and Docker — those commands simply skip gracefully if the tools aren't available. The minimum viable setup is just dcm2niix + the Python packages.
+The pipeline works without FSL and Docker. The minimum viable setup is just dcm2niix + the Python packages.
 
 ## Quick Start
 
@@ -157,12 +157,12 @@ FlipAngle: [6, 8]
 cd /path/to/my_study
 
 # Initialize BIDS scaffolding (once per study)
-init
+bids7t init
 
-# Process a subject (single-session study)
+# Process a subject
 run-all --subject 7T049S14 --dicom-dir /path/to/dicoms
 
-# Process a subject (multi-session study)
+# Process a subjects specific session
 run-all --subject S01 --session MR1 --dicom-dir /path/to/dicoms
 ```
 
@@ -184,13 +184,13 @@ All commands can be called directly (no prefix needed) or via the `bids7t` group
 
 | Command | Description |
 |---------|-------------|
-| `init` | Create BIDS scaffolding files (once per study) |
-| `dcm2src` | Import DICOMs to sourcedata (handles zip files) |
+| `bids7t init` | Create BIDS top-level files (once per study) |
+| `dcm2src` | Import DICOMs to sourcedata  |
 | `src2rawdata` | Convert sourcedata to BIDS rawdata using dcm2niix |
 | `fixanat` | Fix MP2RAGE files (split, mag/phase, metadata) |
 | `fixfmap` | Fix fieldmap files (B0, B1/DREAM, GRE naming) |
 | `fixepi` | Fix EPI metadata (PhaseEncodingDirection, TotalReadoutTime) |
-| `reorient` | Reorient images to standard orientation |
+| `reorient` | Reorient images to a specific orientation |
 | `slicetime` | Slice timing correction |
 | `run-all` | Run all steps in sequence |
 | `bids7t validate` | Run BIDS validator (Docker) |
@@ -201,7 +201,7 @@ All commands can be called directly (no prefix needed) or via the `bids7t` group
 
 | Option | Description |
 |--------|-------------|
-| `--studydir`, `-s` | Path to study directory (auto-detected from CWD) |
+| `--studydir`, `-s` | Path to study directory |
 | `--subject`, `-sub` | Subject ID (without sub- prefix) |
 | `--session`, `-ses` | Session ID (optional, for multi-session studies) |
 | `--force`, `-f` | Force overwrite existing files |
@@ -209,7 +209,7 @@ All commands can be called directly (no prefix needed) or via the `bids7t` group
 
 ## Session Support
 
-`--session` is optional. Omit it for single-session studies.
+`--session` is optional. Omit it for single-session studies or to do the conversion for all session present in sourcedata/.
 
 **With session:** `src2rawdata --subject S01 --session MR1`
 ```
@@ -238,17 +238,3 @@ Each rule in the `series:` section of `bids7t.yaml` has:
 | `dcm2niix_flags` | No | Extra dcm2niix flags: `["-p", "n"]` |
 
 Run numbers are assigned automatically per unique target+suffix+entities combination.
-
-## Batch Processing
-
-```bash
-#!/bin/bash
-cd /path/to/study
-
-SUBJECTS=(S01 S02 S03)
-
-for SUB in "${SUBJECTS[@]}"; do
-    echo "Processing sub-${SUB}"
-    run-all --subject ${SUB} --dicom-dir /dicoms/${SUB}.zip
-done
-```
