@@ -75,7 +75,7 @@ Copy one of the templates below and adjust the `dir_pattern` regexes to
 match your sourcedata directory names.
 
 <details>
-<summary>Template for single-session Philips 7T study</summary>
+<summary>Template for single-session study</summary>
 
 ```yaml
 studydir: /path/to/my_study
@@ -155,7 +155,7 @@ FlipAngle: [6, 8]
 ```bash
 cd /path/to/my_study
 
-# Initialize BIDS scaffolding
+# Initialize BIDS top-level files
 bids7t init
 
 # Process a subject
@@ -179,7 +179,7 @@ slicetime --subject S01
 
 ## Commands
 
-All commands can be called directly (no prefix needed) or via the `bids7t` group:
+Most commands can be called directly or via the `bids7t` group:
 
 | Command | Description |
 |---------|-------------|
