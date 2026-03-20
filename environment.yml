@@ -1,0 +1,22 @@
+# bids7t conda environment
+#
+# Standalone install:
+#   conda env create -f environment.yml
+#   conda activate bids7t
+#
+# For dev access (after cloning the repo):
+#   conda env create -f environment.yml
+#   conda activate bids7t
+#   pip install -e .    # replaces the git install with editable
+
+name: bids7t
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python>=3.9
+  - dcm2niix
+  - pip
+  - pip:
+    - bids7t @ git+https://github.com/RioPhillips/7T_BIDS_Organiser.git

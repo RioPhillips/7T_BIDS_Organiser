@@ -1,6 +1,6 @@
-"""Core module for dcm2bids."""
+"""Core module for bids7t."""
 
-from .session import Session, load_config, get_heuristic_path
+from .session import Session, load_config, get_series_mapping, load_mp2rage_params, detect_sessions
 from .utils import setup_logging, run_command, check_outputs_exist, find_files, get_docker_user_args
 from .config import (
     resolve_studydir,
@@ -13,7 +13,9 @@ from .config import (
 __all__ = [
     "Session",
     "load_config",
-    "get_heuristic_path",
+    "get_series_mapping",
+    "load_mp2rage_params",
+    "detect_sessions",
     "setup_logging",
     "run_command",
     "check_outputs_exist",

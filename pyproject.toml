@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dcm2bids"
-version = "0.2.0"
+name = "bids7t"
+version = "0.3.0"
 description = "DICOM to BIDS conversion tools for 7T MRI data"
 readme = "README.md"
 authors = [
@@ -18,14 +18,18 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
-keywords = ["BIDS", "MRI", "DICOM", "neuroimaging", "7T"]
+keywords = ["BIDS", "MRI", "DICOM", "neuroimaging", "7T", "dcm2niix", "Philips"]
 
 dependencies = [
     "click>=8.0",
     "nibabel>=5.0",
     "numpy>=1.20",
     "pydicom>=2.3",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -37,16 +41,25 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/RioPhillips/dcm2bids"
-Documentation = "https://github.com/RioPhillips/dcm2bids#readme"
-Repository = "https://github.com/RioPhillips/dcm2bids.git"
+Homepage = "https://github.com/RioPhillips/7T_BIDS_Organiser"
+Documentation = "https://github.com/RioPhillips/7T_BIDS_Organiser#readme"
+Repository = "https://github.com/RioPhillips/7T_BIDS_Organiser.git"
 
 [project.scripts]
-dcm2bids = "dcm2bids.cli:main"
+bids7t = "bids7t.cli:main"
+init = "bids7t.cli:init_main"
+dcm2src = "bids7t.cli:dcm2src_main"
+src2rawdata = "bids7t.cli:src2rawdata_main"
+fixanat = "bids7t.cli:fixanat_main"
+fixfmap = "bids7t.cli:fixfmap_main"
+fixepi = "bids7t.cli:fixepi_main"
+reorient = "bids7t.cli:reorient_main"
+slicetime = "bids7t.cli:slicetime_main"
+run-all = "bids7t.cli:run_all_main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["dcm2bids*"]
+include = ["bids7t*"]
 
 [tool.black]
 line-length = 100
