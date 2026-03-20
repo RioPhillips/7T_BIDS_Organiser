@@ -1,7 +1,6 @@
-"""Entry point for python -m dcm2bids."""
+"""Entry point for python -m bids7t."""
 
-from dcm2bids.cli import main
-
+from bids7t.cli import main
 
 if __name__ == "__main__":
     main()
