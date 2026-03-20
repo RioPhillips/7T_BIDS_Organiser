@@ -4,9 +4,9 @@ src2rawdata command - Convert sourcedata to BIDS rawdata using heudiconv.
 This command runs heudiconv to convert DICOMs in sourcedata to NIfTI files
 in the BIDS rawdata directory structure.
 
-IMPORTANT: Your heuristic file MUST include {session} in the template paths
-for session-level organization to work. Example:
-    create_key('sub-{subject}/{session}/anat/sub-{subject}_{session}_T1w')
+Session support:
+- With session: heuristic templates MUST include {session} in paths
+- Without session: heuristic templates should NOT include {session}
 """
 
 import subprocess
@@ -28,7 +28,7 @@ from dcm2bids.core import (
 def run_src2rawdata(
     studydir: Path,
     subject: str,
-    session: str,
+    session: Optional[str] = None,
     heuristic: Optional[Path] = None,
     force: bool = False,
     verbose: bool = False,
@@ -44,8 +44,8 @@ def run_src2rawdata(
         Path to BIDS study directory
     subject : str
         Subject ID (without sub- prefix)
-    session : str
-        Session ID (without ses- prefix)
+    session : str or None
+        Session ID (without ses- prefix). None for single-session studies.
     heuristic : Path, optional
         Path to heuristic file (defaults to config.json setting)
     force : bool
@@ -67,7 +67,8 @@ def run_src2rawdata(
     log_file = sess.paths["logs"] / "src2rawdata.log"
     logger = setup_logging("src2rawdata", log_file, verbose)
     
-    logger.info(f"Starting heudiconv for sub-{subject}_ses-{session}")
+    session_label = f"_ses-{session}" if session else ""
+    logger.info(f"Starting heudiconv for sub-{subject}{session_label}")
     
     # heuristic path
     if heuristic is None:
@@ -81,9 +82,8 @@ def run_src2rawdata(
     
     logger.info(f"Using heuristic: {heuristic}")
     
-    # check session in heuristic has session support
-    # and sourcedata/-dir exists
-    _check_heuristic_session_support(heuristic, logger)
+    # check session consistency between heuristic and CLI
+    _check_heuristic_session_consistency(heuristic, session, logger)
     
     sourcedata = sess.paths["sourcedata"]
     if not sourcedata.exists() or not any(sourcedata.iterdir()):
@@ -132,30 +132,35 @@ def run_src2rawdata(
     return created_files
 
 
-def _check_heuristic_session_support(heuristic: Path, logger) -> None:
+def _check_heuristic_session_consistency(heuristic: Path, session: Optional[str], logger) -> None:
     """
-    Check if heuristic file includes {session} in templates.
+    Check if heuristic file is consistent with session usage.
     
-    Warns the user if session support appears to be missing.
+    Warns if:
+    - Session provided but heuristic has no {session} in templates
+    - No session but heuristic has {session} in templates
     """
     try:
         with open(heuristic, 'r') as f:
             content = f.read()
         
-        # checking some patterns for session support in the heuristic
-        has_session_in_path = '{session}/' in content or '/{session}/' in content
-        has_session_in_filename = '_ses-{session}_' in content
+        has_session_in_heuristic = '{session}' in content
         
-        if not has_session_in_path:
+        if session and not has_session_in_heuristic:
             logger.warning("=" * 60)
-            logger.warning("WARNING: Your heuristic may not support sessions!")
+            logger.warning("WARNING: --session provided but heuristic has no {session} templates!")
             logger.warning("Templates should include {session} in the path, e.g.:")
-            logger.warning("  'sub-{subject}/{session}/anat/sub-{subject}_ses-{session}_T1w'")
+            logger.warning("  'sub-{subject}/{session}/anat/sub-{subject}_{session}_T1w'")
             logger.warning("Without this, files will NOT be organized by session.")
             logger.warning("=" * 60)
-        # elif not has_session_in_filename:
-        #     logger.warning("Heuristic has {session} in path but not in filenames.")
-        #     logger.warning("Consider using: sub-{subject}_ses-{session}_<suffix>")
+        
+        if not session and has_session_in_heuristic:
+            logger.warning("=" * 60)
+            logger.warning("WARNING: No --session provided but heuristic uses {session}!")
+            logger.warning("Either provide --session or use a heuristic without {session}.")
+            logger.warning("Heudiconv may fail or produce unexpected output.")
+            logger.warning("=" * 60)
+            
     except Exception as e:
         logger.debug(f"Could not check heuristic for session support: {e}")
 
@@ -168,29 +173,33 @@ def _run_heudiconv(
     logger
 ) -> None:
     """Run heudiconv to convert DICOMs."""
-    sourcedata_root = sess.paths["sourcedata"].parent.parent  # studydir/sourcedata
-    rawdata_root = sess.paths["rawdata"].parent.parent  # studydir/rawdata
+    sourcedata_root = sess.studydir / "sourcedata"
+    rawdata_root = sess.studydir / "rawdata"
     log_file = sess.paths["logs"] / "heudiconv.log"
     
-    # heudiconv arguments
-    # note: -b notop must be passed as two separate arguments
+    # build heudiconv arguments depending on session
+    heudi_args = [
+        "-s", sess.subject,
+        "-c", "dcm2niix",
+        "--dcmconfig", "/data/projects/7T049_Visual_Brain/7T049_CVI_pRF_lund/code/b1_fix.json"
+    ]
+    
+    if sess.has_session:
+        heudi_args.extend(["-ss", sess.session])
+    
     if notop:
         logger.info("Using --notop mode (skipping top-level BIDS files)")
-        heudi_args = [
-            "-s", sess.subject,
-            "-ss", sess.session,
-            "-c", "dcm2niix",
-            "-b", "notop",
-            "--overwrite"
-        ]
+        heudi_args.extend(["-b", "notop"])
     else:
-        heudi_args = [
-            "-s", sess.subject,
-            "-ss", sess.session,
-            "-c", "dcm2niix",
-            "-b",
-            "--overwrite"
-        ]
+        heudi_args.append("-b")
+    
+    heudi_args.append("--overwrite")
+    
+    # build DICOM pattern based on session
+    if sess.has_session:
+        dicom_subpath = f"sub-{{subject}}/ses-{{session}}/*/*.dcm"
+    else:
+        dicom_subpath = f"sub-{{subject}}/*/*.dcm"
     
     if use_docker:
         logger.info("Running heudiconv via Docker")
@@ -203,7 +212,7 @@ def _run_heudiconv(
             "--volume", f"{sourcedata_root}:/sourcedata:ro",
             "--volume", f"{rawdata_root}:/rawdata",
             "nipy/heudiconv:latest",
-            "-d", "/sourcedata/sub-{subject}/ses-{session}/*/*.dcm",
+            "-d", f"/sourcedata/{dicom_subpath}",
             "-f", f"/base/code/{heuristic.name}",
             "-o", "/rawdata",
             *heudi_args
@@ -212,7 +221,7 @@ def _run_heudiconv(
         logger.info("Running heudiconv locally")
         
         # pattern for finding DICOMs
-        dicom_pattern = str(sourcedata_root / "sub-{subject}" / "ses-{session}" / "*" / "*.dcm")
+        dicom_pattern = str(sourcedata_root / dicom_subpath)
         
         cmd = [
             "heudiconv",

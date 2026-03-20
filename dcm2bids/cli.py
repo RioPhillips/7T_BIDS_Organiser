@@ -1,5 +1,5 @@
 """
-Main CLI for dcm2bids package.
+Main CLI
 
 Provides subcommands for each step of the DICOM to BIDS conversion pipeline.
 """
@@ -14,7 +14,7 @@ from dcm2bids.core import resolve_studydir
 
 
 class HelpfulGroup(click.Group):
-    """Custom group that shows help when no command is given."""
+    # custom group that shows help when no command is given
     
     def invoke(self, ctx):
         if not ctx.protected_args and not ctx.invoked_subcommand:
@@ -24,12 +24,12 @@ class HelpfulGroup(click.Group):
 
 
 class HelpfulCommand(click.Command):
-    """Custom command that shows help when required args are missing."""
+    # custom command that shows help when required args are missing
     
     def invoke(self, ctx):
-        # If no arguments were provided at all, show help
+        # if no arguments were provided at all, show help
         if not ctx.params or all(v is None for v in ctx.params.values() if v is not None):
-            # Check if we have all required params
+            # check if we have all required params
             missing = []
             for param in self.params:
                 if param.required and ctx.params.get(param.name) is None:
@@ -45,7 +45,7 @@ class HelpfulCommand(click.Command):
 
 
 def resolve_studydir_callback(ctx, param, value):
-    """Callback to resolve studydir from config if not provided."""
+    # callback to resolve studydir from config if not provided
     if value is not None:
         return Path(value)
     
@@ -58,7 +58,7 @@ def resolve_studydir_callback(ctx, param, value):
 
 
 def common_options(f):
-    """Common options for subject/session commands."""
+    # common options for subject/session commands
     f = click.option(
         '--studydir', '-s',
         type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -74,8 +74,9 @@ def common_options(f):
     f = click.option(
         '--session', '-ses',
         type=str,
-        required=True,
-        help='Session ID (without ses- prefix, e.g., MR1)'
+        required=False,
+        default=None,
+        help='Session ID (without ses- prefix, e.g., MR1). Optional for single-session studies.'
     )(f)
     f = click.option(
         '--force', '-f',
@@ -100,7 +101,7 @@ def common_options(f):
 @click.version_option(__version__)
 def cli():
     """
-    dcm2bids - DICOM to BIDS conversion tools for 7T MRI data.
+    DICOM to BIDS conversion tools for 7T MRI data.
     
     A modular CLI toolkit for converting raw DICOM files from 7T MRI scanners
     to BIDS-compliant directory structures.
@@ -117,10 +118,14 @@ def cli():
       3. dcm2bids fixanat           - Fix anatomical files (MP2RAGE)
       4. dcm2bids fixfmap           - Fix fieldmap files
       5. dcm2bids fixepi            - Fix EPI JSON metadata
-      6. dcm2bids b1src2rawdata     - Fix B1 map files
-      7. dcm2bids reorient          - Reorient images
-      8. dcm2bids slicetime         - Slice timing correction
-      9. dcm2bids validate          - Run BIDS validator
+      6. dcm2bids reorient          - Reorient images
+      7. dcm2bids slicetime         - Slice timing correction
+      8. dcm2bids validate          - Run BIDS validator
+    
+    \b
+    SESSION SUPPORT:
+      Use --session/-ses for multi-session studies. If omitted, the pipeline
+      runs without session-level organization (single-session mode).
     
     \b
     CONFIG DISCOVERY:
@@ -163,8 +168,10 @@ def dcm2src(studydir, subject, session, force, verbose, dicom_dir, zip_input):
       - Directory with DICOMs: /path/to/dicoms/
     
     \b
-    Output structure:
+    Output structure (with session):
       sourcedata/sub-{subject}/ses-{session}/<series>/*.dcm
+    Output structure (without session):
+      sourcedata/sub-{subject}/<series>/*.dcm
     """
     studydir = resolve_studydir(studydir)
     from dcm2bids.commands.dcm2src import run_dcm2src
@@ -208,9 +215,11 @@ def src2rawdata(studydir, subject, session, force, verbose, heuristic, use_docke
     Convert sourcedata to BIDS rawdata using heudiconv.
     
     \b
-    IMPORTANT: Your heuristic file MUST include {session} in templates:
-      CORRECT:   'sub-{subject}/{session}/anat/sub-{subject}_{session}_T1w'
-      INCORRECT: 'sub-{subject}/anat/sub-{subject}_T1w'
+    If using sessions, your heuristic MUST include {session} in templates:
+      Example:   'sub-{subject}/{session}/anat/sub-{subject}_{session}_T1w'
+    
+    If NOT using sessions, templates should omit {session}:
+      Example:   'sub-{subject}/anat/sub-{subject}_T1w'
     
     \b
     For batch processing, use --notop to avoid race conditions,
@@ -269,9 +278,11 @@ def fixfmap(studydir, subject, session, force, verbose):
     
     \b
     This command:
+      - Renames B0 shimmed fieldmap files to BIDS convention
       - Renames GRE fieldmap/magnitude files to BIDS convention
-      - Adds Units field to GRE fieldmap JSON
-      - Adds IntendedFor field to SE-EPI JSON files
+      - Fixes B1 map naming from heudiconv output
+      - Adds Units field to fieldmap JSONs
+      - Adds IntendedFor field to fieldmap JSON files
     """
     studydir = resolve_studydir(studydir)
     from dcm2bids.commands.fixfmap import run_fixfmap
@@ -312,30 +323,6 @@ def fixepi(studydir, subject, session, force, verbose, ap_phase_enc):
         subject=subject,
         session=session,
         ap_phase_enc=ap_phase_enc,
-        force=force,
-        verbose=verbose
-    )
-
-
-
-# b1src2rawdata command
-
-
-@cli.command(context_settings=dict(help_option_names=['-h', '--help']))
-@common_options
-def b1src2rawdata(studydir, subject, session, force, verbose):
-    """
-    Import B1 map files.
-    
-    Converts B1 DICOMs using dcm2niix directly (workaround for
-    heudiconv issues with B1 maps that cause incorrect naming).
-    """
-    studydir = resolve_studydir(studydir)
-    from dcm2bids.commands.b1src2rawdata import run_b1src2rawdata
-    run_b1src2rawdata(
-        studydir=studydir,
-        subject=subject,
-        session=session,
         force=force,
         verbose=verbose
     )

@@ -1,6 +1,6 @@
-
-# session class for managing subject/session paths and file operations.
-
+"""
+Session class for managing subject/session paths and file operations.
+"""
 
 from pathlib import Path
 import json
@@ -17,13 +17,16 @@ class Session:
     Represents a single subject/session combination in a BIDS study.
     
     Handles path resolution, file I/O, and BIDS naming conventions.
+    
+    When session is None, paths and prefixes omit the ses- level entirely,
+    producing a flat subject-level layout (e.g. rawdata/sub-X/anat/).
     """
     
     def __init__(
         self,
         studydir: Path,
         subject: str,
-        session: str,
+        session: Optional[str] = None,
         dicom_dir: Optional[Path] = None
     ):
         """
@@ -35,8 +38,8 @@ class Session:
             Root directory of the BIDS study
         subject : str
             Subject ID (without 'sub-' prefix)
-        session : str
-            Session ID (without 'ses-' prefix)
+        session : str or None
+            Session ID (without 'ses-' prefix). If None, no session level.
         dicom_dir : Path, optional
             Path to source DICOM directory
         """
@@ -45,32 +48,47 @@ class Session:
         self.session = session
         self.dicom_dir = Path(dicom_dir) if dicom_dir else None
         
+        self.has_session = session is not None
+        
         # BIDS prefixes
         self.sub_prefix = f"sub-{subject}"
-        self.ses_prefix = f"ses-{session}"
-        self.subses_prefix = f"sub-{subject}_ses-{session}"
+        if self.has_session:
+            self.ses_prefix = f"ses-{session}"
+            self.subses_prefix = f"sub-{subject}_ses-{session}"
+        else:
+            self.ses_prefix = None
+            self.subses_prefix = f"sub-{subject}"
         
         self.paths = self._init_paths()
     
     def _init_paths(self) -> Dict[str, Path]:
-        """Initialize all relevant paths for this session."""
+        # initializes all relevant paths for this session
         base = self.studydir
+        
+        if self.has_session:
+            rawdata_session = base / "rawdata" / self.sub_prefix / self.ses_prefix
+            sourcedata_session = base / "sourcedata" / self.sub_prefix / self.ses_prefix
+            logs_session = base / "derivatives" / "logs" / self.sub_prefix / self.ses_prefix
+        else:
+            rawdata_session = base / "rawdata" / self.sub_prefix
+            sourcedata_session = base / "sourcedata" / self.sub_prefix
+            logs_session = base / "derivatives" / "logs" / self.sub_prefix
         
         return {
             #  BIDS directories
-            "rawdata": base / "rawdata" / self.sub_prefix / self.ses_prefix,
+            "rawdata": rawdata_session,
             "rawdata_subject": base / "rawdata" / self.sub_prefix,
             "rawdata_root": base / "rawdata",
-            "sourcedata": base / "sourcedata" / self.sub_prefix / self.ses_prefix,
+            "sourcedata": sourcedata_session,
             
             #  rawdata directories
-            "anat": base / "rawdata" / self.sub_prefix / self.ses_prefix / "anat",
-            "func": base / "rawdata" / self.sub_prefix / self.ses_prefix / "func",
-            "fmap": base / "rawdata" / self.sub_prefix / self.ses_prefix / "fmap",
-            "dwi": base / "rawdata" / self.sub_prefix / self.ses_prefix / "dwi",
+            "anat": rawdata_session / "anat",
+            "func": rawdata_session / "func",
+            "fmap": rawdata_session / "fmap",
+            "dwi": rawdata_session / "dwi",
             
             "derivatives": base / "derivatives",
-            "logs": base / "derivatives" / "logs" / self.sub_prefix / self.ses_prefix,
+            "logs": logs_session,
             
             "code": base / "code",
             
@@ -80,12 +98,12 @@ class Session:
     
     @property
     def scans_tsv(self) -> Path:
-        """Path to the session's scans.tsv file."""
+        # path to the session's scans.tsv file
         return self.paths["rawdata"] / f"{self.subses_prefix}_scans.tsv"
     
     @property
     def scans_json(self) -> Path:
-        """Path to the session's scans.json file."""
+        # path to the session's scans.json file
         return self.paths["rawdata"] / f"{self.subses_prefix}_scans.json"
     
     def ensure_directories(self, *keys: str) -> None:
@@ -145,7 +163,7 @@ class Session:
         logger.debug(f"Wrote JSON: {json_path}")
     
     def _to_json_path(self, path: Path) -> Path:
-        """Convert a path to its JSON sidecar path."""
+        # convert a path to its JSON sidecar path
         path = Path(path)
         if path.suffix == ".gz":
             return path.with_suffix("").with_suffix(".json")
@@ -154,13 +172,13 @@ class Session:
         return path
     
     def make_writable(self, path: Path) -> None:
-        """Make a file writable."""
+        # makes a file writable
         path = Path(path)
         if path.exists():
             path.chmod(path.stat().st_mode | stat.S_IWUSR)
     
     def make_readonly(self, path: Path) -> None:
-        """Make a file read-only."""
+        # makes a file read-only."""
         path = Path(path)
         if path.exists():
             path.chmod(path.stat().st_mode & ~stat.S_IWUSR)
@@ -250,167 +268,136 @@ class Session:
         Returns
         -------
         tuple
-            (fieldnames, list of row dicts)
+            (fieldnames, rows) where rows is a list of dicts
         """
         if not self.scans_tsv.exists():
             return ["filename", "acq_time"], []
         
-        with open(self.scans_tsv, newline="") as f:
-            reader = csv.DictReader(f, delimiter="\t")
+        with open(self.scans_tsv, newline='') as f:
+            reader = csv.DictReader(f, delimiter='\t')
             fieldnames = reader.fieldnames or ["filename", "acq_time"]
             rows = list(reader)
-        return fieldnames, rows
-    
-    def write_scans_tsv(self, fieldnames: list[str], rows: list[dict]) -> None:
-        """
-        Write the scans.tsv file.
         
-        Parameters
-        ----------
-        fieldnames : list
-            Column names
-        rows : list
-            List of row dicts
-        """
-        self.scans_tsv.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.scans_tsv, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
+        return list(fieldnames), rows
+    
+    def write_scans_tsv(self, fieldnames: list, rows: list) -> None:
+        """Write the scans.tsv file."""
+        self.make_writable(self.scans_tsv)
+        
+        with open(self.scans_tsv, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t',
+                                     extrasaction='ignore')
             writer.writeheader()
             writer.writerows(rows)
-        logger.info(f"Wrote scans.tsv with {len(rows)} entries")
+        
+        self.make_readonly(self.scans_tsv)
     
-    def add_to_scans_tsv(self, filename: str, acq_time: str = "n/a", **extra) -> None:
+    def add_to_scans_tsv(self, filename: str, acq_time: str = "n/a", **kwargs) -> None:
         """
-        Add an entry to scans.tsv.
+        Add a file entry to scans.tsv.
         
         Parameters
         ----------
         filename : str
-            Relative path to file
+            Relative path to file (e.g., 'anat/sub-X_T1w.nii.gz')
         acq_time : str
             Acquisition time
-        **extra : str
+        **kwargs
             Additional columns
         """
         fieldnames, rows = self.read_scans_tsv()
         
-        # add any new columns
-        for key in extra:
+        # add new columns if needed
+        for key in kwargs:
             if key not in fieldnames:
                 fieldnames.append(key)
         
         # check if already exists
-        existing = [r for r in rows if r.get("filename") == filename]
-        if existing:
-            logger.debug(f"Entry already in scans.tsv: {filename}")
-            return
+        for row in rows:
+            if row.get("filename") == filename:
+                row["acq_time"] = acq_time
+                row.update(kwargs)
+                self.write_scans_tsv(fieldnames, rows)
+                return
         
-        row = {"filename": filename, "acq_time": acq_time, **extra}
-        rows.append(row)
+        # add new row
+        new_row = {"filename": filename, "acq_time": acq_time}
+        new_row.update(kwargs)
+        rows.append(new_row)
+        
         self.write_scans_tsv(fieldnames, rows)
     
     def remove_from_scans_tsv(self, filename: str) -> bool:
         """
-        Remove an entry from scans.tsv.
+        Remove a file entry from scans.tsv.
         
-        Parameters
-        ----------
-        filename : str
-            Relative path to file
-            
-        Returns
-        -------
-        bool
-            True if entry was found and removed
+        Returns True if entry was found and removed.
         """
         fieldnames, rows = self.read_scans_tsv()
-        original_count = len(rows)
-        rows = [r for r in rows if r.get("filename") != filename]
         
-        if len(rows) < original_count:
-            self.write_scans_tsv(fieldnames, rows)
-            logger.debug(f"Removed from scans.tsv: {filename}")
+        new_rows = [r for r in rows if r.get("filename") != filename]
+        
+        if len(new_rows) < len(rows):
+            self.write_scans_tsv(fieldnames, new_rows)
             return True
         return False
     
     def rename_in_scans_tsv(self, old_filename: str, new_filename: str) -> bool:
         """
-        Rename a file entry in scans.tsv (preserves all metadata).
+        Rename a file entry in scans.tsv.
         
-        Parameters
-        ----------
-        old_filename : str
-            Old relative path
-        new_filename : str
-            New relative path
-            
-        Returns
-        -------
-        bool
-            True if entry was found and renamed
+        Returns True if entry was found and renamed.
         """
         fieldnames, rows = self.read_scans_tsv()
         
+        found = False
         for row in rows:
             if row.get("filename") == old_filename:
                 row["filename"] = new_filename
-                self.write_scans_tsv(fieldnames, rows)
-                logger.debug(f"Renamed in scans.tsv: {old_filename} -> {new_filename}")
-                return True
+                found = True
+                break
         
-        logger.warning(f"Entry not found in scans.tsv for rename: {old_filename}")
-        return False
+        if found:
+            self.write_scans_tsv(fieldnames, rows)
+        return found
     
-    def replace_in_scans_tsv(self, old_filename: str, new_filenames: list[str]) -> bool:
+    def replace_in_scans_tsv(self, old_filename: str, new_filenames: list) -> bool:
         """
-        Replace one entry with multiple entries (for file splits).
+        Replace one entry with multiple entries in scans.tsv.
         
-        The new entries inherit all metadata (acq_time, operator, etc.) from the old entry.
+        The new entries inherit metadata from the old entry.
         
-        Parameters
-        ----------
-        old_filename : str
-            Original file path to replace
-        new_filenames : list
-            List of new file paths
-            
-        Returns
-        -------
-        bool
-            True if entry was found and replaced
+        Returns True if old entry was found and replaced.
         """
         fieldnames, rows = self.read_scans_tsv()
         
         # find old entry
         old_entry = None
         old_idx = None
-        for idx, row in enumerate(rows):
+        for i, row in enumerate(rows):
             if row.get("filename") == old_filename:
                 old_entry = row.copy()
-                old_idx = idx
+                old_idx = i
                 break
         
         if old_entry is None:
-            logger.warning(f"Entry not found in scans.tsv for replace: {old_filename}")
             return False
         
-        # remove old entry
-        rows.pop(old_idx)
+        # create new entries inheriting metadata
+        new_rows = []
+        for new_fn in new_filenames:
+            new_row = dict(old_entry)
+            new_row["filename"] = new_fn
+            new_rows.append(new_row)
         
-        # new entries with inherited metadata at the same position
-        for new_filename in new_filenames:
-            new_entry = old_entry.copy()
-            new_entry["filename"] = new_filename
-            rows.insert(old_idx, new_entry)
-            old_idx += 1
-        
+        # replace
+        rows[old_idx:old_idx + 1] = new_rows
         self.write_scans_tsv(fieldnames, rows)
-        logger.debug(f"Replaced in scans.tsv: {old_filename} -> {new_filenames}")
         return True
     
-    def get_scans_entry(self, filename: str) -> Optional[Dict[str, str]]:
+    def get_scans_entry(self, filename: str) -> Optional[Dict]:
         """
-        Get a single entry from scans.tsv by filename.
+        Get a specific entry from scans.tsv.
         
         Parameters
         ----------
