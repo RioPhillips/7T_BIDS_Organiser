@@ -252,14 +252,3 @@ for SUB in "${SUBJECTS[@]}"; do
     run-all --subject ${SUB} --dicom-dir /dicoms/${SUB}.zip
 done
 ```
-
-## Why not heudiconv?
-
-Heudiconv has a fundamental limitation with Philips multi-output sequences.
-When dcm2niix produces multiple files from one DICOM series (e.g., Philips DREAM
-B1 maps produce 6 sub-series), heudiconv's `tuneup_bids_json_files()` can crash
-with an `AssertionError` because it tries to stamp the same JSON file twice.
-
-bids7t calls dcm2niix directly per series with full control over flags, avoiding
-this issue entirely. The `dcm2niix_flags` field in the series mapping lets you
-pass per-series options like `-p n` for Philips fieldmaps.
