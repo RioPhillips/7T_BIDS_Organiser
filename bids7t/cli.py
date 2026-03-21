@@ -1,8 +1,7 @@
 """
-Main CLI for bids7t package.
+Main CLI for the package.
 
 Provides subcommands for each step of the DICOM to BIDS conversion pipeline.
-Uses dcm2niix directly with configurable series-to-BIDS mapping.
 """
 
 import click
@@ -58,18 +57,17 @@ def cli():
     bids7t - DICOM to BIDS conversion tools for 7T MRI data.
     
     Uses dcm2niix directly with configurable series-to-BIDS mapping.
-    No heudiconv dependency.
     
     \b
     WORKFLOW:
-      0. bids7t init             - Create BIDS scaffolding (once per study)
-      1. bids7t dcm2src          - Import DICOMs to sourcedata
-      2. bids7t src2rawdata      - Convert to BIDS with dcm2niix
-      3. bids7t fixanat          - Fix anatomical files (MP2RAGE)
-      4. bids7t fixfmap          - Fix fieldmap files (B0, B1/DREAM)
-      5. bids7t fixepi           - Fix EPI JSON metadata
-      6. bids7t reorient         - Reorient images
-      7. bids7t slicetime        - Slice timing correction
+      0. bids7t init             - Create BIDS top-level files (once per study)
+      1. dcm2src                 - Import DICOMs to sourcedata
+      2. src2rawdata             - Convert to BIDS with dcm2niix
+      3. fixanat                  - Fix anatomical files (MP2RAGE)
+      4. fixfmap                  - Fix fieldmap files (B0, B1/DREAM)
+      5. fixepi                 - Fix EPI JSON metadata
+      6. reorient               - Reorient images
+      7. slicetime               - Slice timing correction
       8. bids7t validate         - Run BIDS validator
     
     \b
@@ -84,16 +82,16 @@ def cli():
     pass
 
 
-# --- init ---
+# init
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.option('--studydir', '-s', type=click.Path(exists=True, file_okay=False, path_type=Path),
               default=None, help='Path to BIDS study directory (default: auto-detect from CWD)')
-@click.option('--force', '-f', is_flag=True, default=False, help='Overwrite existing scaffolding files')
+@click.option('--force', '-f', is_flag=True, default=False, help='Overwrite existing BIDS top-level files')
 @click.option('--verbose', '-v', is_flag=True, default=False, help='Enable verbose output')
 def init(studydir, force, verbose):
     """
-    Initialize BIDS study scaffolding.
+    Initialize BIDS study top-level files.
     
     \b
     Creates top-level BIDS files in rawdata/ with TODO placeholders:
@@ -109,7 +107,7 @@ def init(studydir, force, verbose):
     run_init(studydir=studydir, verbose=verbose, force=force)
 
 
-# --- dcm2src ---
+# dcm2src 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
@@ -118,14 +116,14 @@ def init(studydir, force, verbose):
 @click.option('--zip-input', is_flag=True, default=False,
               help='Explicitly specify that input is/contains a zip file')
 def dcm2src(studydir, subject, session, force, verbose, dicom_dir, zip_input):
-    """Import DICOMs to sourcedata directory."""
+    # imports DICOMs to sourcedata directory."""
     studydir = resolve_studydir(studydir)
     from bids7t.commands.dcm2src import run_dcm2src
     run_dcm2src(studydir=studydir, subject=subject, session=session,
                 dicom_dir=dicom_dir, force=force, verbose=verbose, zip_input=zip_input)
 
 
-# --- src2rawdata ---
+# src2rawdata
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
@@ -147,38 +145,38 @@ def src2rawdata(studydir, subject, session, force, verbose):
                         force=force, verbose=verbose)
 
 
-# --- fixanat ---
+# fixanat 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
 def fixanat(studydir, subject, session, force, verbose):
-    """Fix anatomical files (MP2RAGE splitting, mag/phase computation)."""
+    # fixes anatomical files
     studydir = resolve_studydir(studydir)
     from bids7t.commands.fixanat import run_fixanat
     for ses in _resolve_sessions(studydir, subject, session):
         run_fixanat(studydir=studydir, subject=subject, session=ses, force=force, verbose=verbose)
 
 
-# --- fixfmap ---
+# fixfmap 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
 def fixfmap(studydir, subject, session, force, verbose):
-    """Fix fieldmap files (B0/B1/GRE naming, Units, IntendedFor)."""
+    # fixes fieldmap files (B0/B1/GRE naming, Units, IntendedFor
     studydir = resolve_studydir(studydir)
     from bids7t.commands.fixfmap import run_fixfmap
     for ses in _resolve_sessions(studydir, subject, session):
         run_fixfmap(studydir=studydir, subject=subject, session=ses, force=force, verbose=verbose)
 
 
-# --- fixepi ---
+# fixepi 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
 @click.option('--ap-phase-enc', type=str, default='j-',
               help='Phase encoding direction for AP scans (default: j-)')
 def fixepi(studydir, subject, session, force, verbose, ap_phase_enc):
-    """Fix EPI JSON metadata (PhaseEncodingDirection, TotalReadoutTime)."""
+    # EPI JSON metadata (PhaseEncodingDirection, TotalReadoutTime, etc)
     studydir = resolve_studydir(studydir)
     from bids7t.commands.fixepi import run_fixepi
     for ses in _resolve_sessions(studydir, subject, session):
@@ -186,7 +184,7 @@ def fixepi(studydir, subject, session, force, verbose, ap_phase_enc):
                    ap_phase_enc=ap_phase_enc, force=force, verbose=verbose)
 
 
-# --- reorient ---
+# reorient 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
@@ -194,7 +192,7 @@ def fixepi(studydir, subject, session, force, verbose, ap_phase_enc):
 @click.option('--modality', type=click.Choice(['all', 'anat', 'func', 'fmap', 'dwi']),
               default='all', help='Which modality to process')
 def reorient(studydir, subject, session, force, verbose, orientation, modality):
-    """Reorient images to standard orientation."""
+    # reorient images to standard orientation
     studydir = resolve_studydir(studydir)
     from bids7t.commands.reorient import run_reorient
     for ses in _resolve_sessions(studydir, subject, session):
@@ -202,14 +200,14 @@ def reorient(studydir, subject, session, force, verbose, orientation, modality):
                      orientation=orientation, modality=modality, force=force, verbose=verbose)
 
 
-# --- slicetime ---
+# slicetime 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
 @click.option('--slice-order', type=click.Choice(['up', 'down', 'odd', 'even']), default='down')
 @click.option('--slice-direction', type=int, default=3)
 def slicetime(studydir, subject, session, force, verbose, slice_order, slice_direction):
-    """Slice timing correction using FSL slicetimer."""
+    # slice timing correction using FSL slicetimer
     studydir = resolve_studydir(studydir)
     from bids7t.commands.slicetime import run_slicetime
     for ses in _resolve_sessions(studydir, subject, session):
@@ -217,19 +215,18 @@ def slicetime(studydir, subject, session, force, verbose, slice_order, slice_dir
                       slice_order=slice_order, slice_direction=slice_direction, force=force, verbose=verbose)
 
 
-# --- validate ---
+# validate 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
 def validate(studydir, subject, session, force, verbose):
-    """Run BIDS validator."""
     studydir = resolve_studydir(studydir)
     from bids7t.commands.validate import run_validate
     for ses in _resolve_sessions(studydir, subject, session):
         run_validate(studydir=studydir, subject=subject, session=ses, force=force, verbose=verbose)
 
 
-# --- qc ---
+# qc 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
@@ -237,7 +234,6 @@ def validate(studydir, subject, session, force, verbose):
 @click.option('--n-procs', type=int, default=4)
 @click.option('--modalities', '-mod', type=str, multiple=True, default=None)
 def qc(studydir, subject, session, force, verbose, mem_gb, n_procs, modalities):
-    """Run MRIQC quality control."""
     studydir = resolve_studydir(studydir)
     from bids7t.commands.qc import run_qc
     for ses in _resolve_sessions(studydir, subject, session):
@@ -274,12 +270,12 @@ def run_all(studydir, subject, session, force, verbose, dicom_dir,
                       skip_validate=skip_validate, skip_qc=skip_qc)
 
 
-# --- status ---
+# status 
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.option('--verbose', '-v', is_flag=True, default=False)
 def status(verbose):
-    """Show current bids7t configuration status."""
+    # show current bids7t configuration status
     from bids7t.core import find_config_from_cwd, find_studydir_from_cwd, load_study_config
     
     click.echo("bids7t status")
@@ -326,11 +322,11 @@ def main():
     cli()
 
 
-# --- Standalone entry points ---
-# These allow running commands directly without the 'bids7t' prefix:
+#  entry points 
+# allows running commands directly without the 'bids7t' prefix:
 #   dcm2src --subject S01 ...
 #   src2rawdata --subject S01 ...
-# The bids7t group command still works too:
+# the bids7t group command still works too:
 #   bids7t dcm2src --subject S01 ...
 
 def dcm2src_main():

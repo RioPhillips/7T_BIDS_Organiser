@@ -1,5 +1,5 @@
 """
-dcm2src command - Import DICOMs to sourcedata directory.
+dcm2src command to import DICOMs to sourcedata directory.
 
 Handles zip file inputs and organizes DICOMs into the BIDS sourcedata structure.
 """

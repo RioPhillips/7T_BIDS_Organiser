@@ -1,4 +1,4 @@
-"""qc - Run MRIQC quality control."""
+"""qc. runs MRIQC quality control."""
 
 import subprocess, shutil
 from pathlib import Path

@@ -1,12 +1,9 @@
 """
-src2rawdata command - Convert sourcedata to BIDS rawdata using dcm2niix.
+src2rawdata command. converts sourcedata to BIDS rawdata using dcm2niix.
 
 Reads series mapping rules from code/bids7t.yaml to determine how each
-DICOM series directory maps to BIDS output. Calls dcm2niix directly
-per series with full control over flags.
+DICOM series directory maps to BIDS output. 
 
-This replaces heudiconv, which has fundamental limitations with Philips
-multi-output sequences (B1 DREAM, complex fieldmaps).
 """
 
 import re
@@ -135,6 +132,9 @@ def run_src2rawdata(
         for name in skipped_dirs:
             logger.debug(f"  - {name}")
     
+    # post-conversion cleanup
+    _remove_adc_files(sess, logger)
+    
     # post-conversion metadata
     _update_participants_tsv(sess, logger)
     _create_scans_json(sess, logger)
@@ -186,7 +186,7 @@ def _match_series(series_dir: Path, rules: List[Dict], logger) -> Optional[Dict]
 
 
 def _is_derived(series_dir: Path) -> bool:
-    """Check if series is derived by reading one DICOM."""
+    # checks if series is derived by reading one DICOM
     dcm_file = _get_first_dicom(series_dir)
     if dcm_file is None:
         return False
@@ -199,7 +199,7 @@ def _is_derived(series_dir: Path) -> bool:
 
 
 def _check_dicom_fields(series_dir: Path, field_checks: Dict[str, str]) -> bool:
-    """Check specific DICOM fields against expected values."""
+    # checks specific DICOM fields against expected values
     dcm_file = _get_first_dicom(series_dir)
     if dcm_file is None:
         return False
@@ -215,12 +215,12 @@ def _check_dicom_fields(series_dir: Path, field_checks: Dict[str, str]) -> bool:
 
 
 def _get_first_dicom(series_dir: Path) -> Optional[Path]:
-    """Get the first DICOM file from a series directory."""
+    # get the first DICOM file from a series directory
     dcm_files = list(series_dir.glob("*.dcm")) + list(series_dir.glob("*.DCM"))
     if dcm_files:
         return sorted(dcm_files)[0]
     
-    # try files without extension (some scanners)
+    # try files without extension
     for f in sorted(series_dir.iterdir()):
         if f.is_file() and not f.name.startswith("."):
             return f
@@ -245,7 +245,7 @@ def _run_key(rule: Dict) -> str:
 
 
 def _build_bids_name(prefix: str, rule: Dict, run_num: int) -> str:
-    """Build the BIDS filename from prefix, rule, and run number."""
+    # build the BIDS filename from prefix, rule, and run number
     parts = [prefix]
     
     entities = rule.get("entities", {})
@@ -270,7 +270,7 @@ def _convert_series(
     logger
 ) -> List[Path]:
     """
-    Convert a single DICOM series directory to BIDS NIfTI.
+    Converts a single DICOM series directory to BIDS NIfTI.
     
     Returns list of created files.
     """
@@ -304,7 +304,7 @@ def _convert_series(
         logger.warning(f"dcm2niix returned code {result.returncode} for {series_dir.name}")
         if result.stderr:
             logger.warning(f"  stderr: {result.stderr[:200]}")
-        # don't crash - some series legitimately produce warnings
+        # some series legitimately produce warnings so dont want to crash if that is the case
     
     if result.stdout and logger.level <= 10:
         for line in result.stdout.splitlines()[:10]:
@@ -324,9 +324,18 @@ def _convert_series(
     
     logger.info(f"  Created {len(created_niftis)} NIfTI + {len(created_jsons)} JSON")
     
-    # strip heudiconv-style temp suffixes from dcm2niix
-    # dcm2niix can add _e1, _e1a, _e2, _ph, _r100 etc to the filename
-    # we leave these for fix commands to handle, but register them in scans.tsv
+    # inject SkullStripped: false into all JSON sidecars at creation time
+    # raw scanner data is is probably not skull-stripped but BIDS requires this field.
+    # the user should change the specific files in the case that it is
+    for json_file in created_jsons:
+        try:
+            with open(json_file) as f:
+                meta = json.load(f)
+            meta["SkullStripped"] = False
+            with open(json_file, "w") as f:
+                json.dump(meta, f, indent=4)
+        except Exception:
+            pass  
     
     # register in scans.tsv
     for nii_file in created_niftis:
@@ -338,7 +347,7 @@ def _convert_series(
 
 
 def _get_acq_time(nii_file: Path, sess: Session) -> str:
-    """Extract acquisition time from JSON sidecar."""
+    # get acquisition time from JSON sidecar
     try:
         meta = sess.get_json(nii_file)
         
@@ -364,6 +373,24 @@ def _get_acq_time(nii_file: Path, sess: Session) -> str:
     return "n/a"
 
 
+def _remove_adc_files(sess: Session, logger) -> None:
+    """
+    Remove redundant ADC files from dwi directory.
+    
+    dcm2niix sometimes generate ADC maps from
+    DWI data. These are not used to my knowledge.
+    """
+    dwi_dir = sess.paths["dwi"]
+    if not dwi_dir.exists():
+        return
+    
+    for adc_file in sorted(dwi_dir.glob("*_ADC*")):
+        logger.info(f"Removing ADC file: {adc_file.name}")
+        if adc_file.suffix == ".gz" or adc_file.name.endswith(".nii.gz"):
+            sess.remove_from_scans_tsv(f"dwi/{adc_file.name}")
+        adc_file.unlink()
+
+
 def _update_participants_tsv(sess: Session, logger) -> None:
     """
     Add/update this subject's entry in participants.tsv.
@@ -373,7 +400,7 @@ def _update_participants_tsv(sess: Session, logger) -> None:
     """
     rawdata_root = sess.paths["rawdata_root"]
     ptsv = rawdata_root / "participants.tsv"
-    participant_id = sess.sub_prefix  # "sub-7T049S14"
+    participant_id = sess.sub_prefix  
     
     # read existing entries
     existing_ids = set()

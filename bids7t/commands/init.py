@@ -1,7 +1,7 @@
 """
-init command - Initialize BIDS study scaffolding.
+init command to initialize BIDS top-level files.
 
-Creates top-level BIDS files in rawdata/:
+Creates the following files in rawdata/:
   - dataset_description.json
   - README
   - CHANGES
@@ -25,11 +25,9 @@ def run_init(
     verbose: bool = False,
     force: bool = False
 ) -> None:
-    """
-    Initialize BIDS study scaffolding files.
-    
+    """    
     Creates template files in rawdata/ with TODO placeholders.
-    Safe to re-run — only creates files that don't exist,
+    Safe to re-run since it only creates files that don't exist,
     unless --force is used.
     """
     studydir = Path(studydir)
@@ -41,11 +39,11 @@ def run_init(
     log_file = log_dir / "init.log"
     logger = setup_logging("init", log_file, verbose)
     
-    logger.info(f"Initializing BIDS scaffolding in {rawdata_root}")
+    logger.info(f"Initializing BIDS files in {rawdata_root}")
     
     created = []
     
-    # --- dataset_description.json ---
+    # dataset_description.json 
     desc_file = rawdata_root / "dataset_description.json"
     if not desc_file.exists() or force:
         desc = {
@@ -80,7 +78,7 @@ def run_init(
         created.append(desc_file.name)
         logger.info(f"  Created {desc_file.name}")
     
-    # --- README ---
+    # README 
     readme_file = rawdata_root / "README"
     if not readme_file.exists() or force:
         readme_file.write_text(
@@ -90,7 +88,7 @@ def run_init(
         created.append(readme_file.name)
         logger.info(f"  Created {readme_file.name}")
     
-    # --- CHANGES ---
+    # CHANGES 
     changes_file = rawdata_root / "CHANGES"
     if not changes_file.exists() or force:
         changes_file.write_text(
@@ -105,14 +103,14 @@ def run_init(
         created.append(changes_file.name)
         logger.info(f"  Created {changes_file.name}")
     
-    # --- .bidsignore ---
+    # .bidsignore 
     ignore_file = rawdata_root / ".bidsignore"
     if not ignore_file.exists() or force:
         ignore_file.write_text("")
         created.append(ignore_file.name)
         logger.info(f"  Created {ignore_file.name}")
     
-    # --- participants.json (column descriptions) ---
+    # participants.json (column descriptions) 
     pjson_file = rawdata_root / "participants.json"
     if not pjson_file.exists() or force:
         pjson = {
@@ -135,7 +133,7 @@ def run_init(
         created.append(pjson_file.name)
         logger.info(f"  Created {pjson_file.name}")
     
-    # --- participants.tsv (header only if new) ---
+    # participants.tsv (header only if new) 
     ptsv_file = rawdata_root / "participants.tsv"
     if not ptsv_file.exists() or force:
         ptsv_file.write_text("participant_id\tage\tsex\tgroup\n")
@@ -143,13 +141,13 @@ def run_init(
         logger.info(f"  Created {ptsv_file.name}")
     
     if created:
-        logger.info(f"Created {len(created)} BIDS scaffolding files")
+        logger.info(f"Created {len(created)} BIDS files")
     else:
-        logger.info("All scaffolding files already exist (use --force to overwrite)")
+        logger.info("All BIDS files already exist (use --force to overwrite)")
 
 
-# --- scans.json template ---
-# This is created per-session by src2rawdata, but we define the template here
+# scans.json template 
+# this is created per-session by src2rawdata, but we define the template here
 
 SCANS_JSON_TEMPLATE = {
     "filename": {

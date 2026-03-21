@@ -230,7 +230,7 @@ Each rule in the `series:` section of `bids7t.yaml` has:
 | `match.dir_pattern` | Yes | Regex matched against sourcedata directory name |
 | `match.exclude_derived` | No | Skip if DICOM ImageType contains DERIVED |
 | `match.require_derived` | No | Only match if DICOM ImageType contains DERIVED |
-| `match.dicom_field` | No | Dict of DICOM field name → regex to check |
+| `match.dicom_field` | No | Dict of DICOM field name -> regex to check |
 | `target` | Yes | BIDS directory: `anat`, `func`, `fmap`, `dwi` |
 | `suffix` | Yes | BIDS suffix: `T1w`, `bold`, `TB1map`, `dwi`, etc. |
 | `entities` | No | BIDS entities: `{task: 8bars, dir: AP, acq: b1}` |

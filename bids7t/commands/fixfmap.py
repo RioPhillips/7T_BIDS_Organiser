@@ -1,13 +1,13 @@
 """
-fixfmap command - Fix fieldmap files.
+fixfmap command. handle the  fieldmap files.
 
 This command:
 - Cleans up dcm2niix multi-output suffixes (_e1a, _e1_ph, _e2, _r100, etc.)
   for B1 DREAM maps and renames to proper BIDS TB1map/magnitude
 - Renames B0 shimmed fieldmap numbered variants to BIDS convention
 - Renames GRE fieldmap/magnitude numbered variants to BIDS convention
+  (also strips invalid dir- entity from fieldmap/magnitude names)
 - Adds Units field to fieldmap JSONs
-- Adds IntendedFor field to fieldmap JSON files
 """
 
 import re
@@ -29,7 +29,6 @@ def run_fixfmap(
     logger = setup_logging("fixfmap", log_file, verbose)
     
     fmap_dir = sess.paths["fmap"]
-    func_dir = sess.paths["func"]
     
     if not fmap_dir.exists():
         logger.info(f"fmap directory not found: {fmap_dir}")
@@ -64,10 +63,6 @@ def run_fixfmap(
         
         # Units metadata
         _add_units_to_fieldmaps(fmap_dir, sess, logger, run)
-        
-        # IntendedFor
-        if func_dir.exists():
-            _add_intended_for(fmap_dir, func_dir, sess, logger, run)
     
     logger.info("Fieldmap fixes complete")
 
@@ -83,96 +78,94 @@ def _find_run_numbers(fmap_dir: Path, prefix: str) -> Set[int]:
 
 def _fix_b1_suffixes(fmap_dir: Path, sess: Session, logger, run: int, force: bool) -> None:
     """
-    Clean up dcm2niix multi-output suffixes on B1 map files.
+    Clean up dcm2niix multi-output suffixes on B1 DREAM map files.
     
-    dcm2niix produces multiple outputs from Philips DREAM B1 sequences
-    with suffixes like _e1a, _e1_ph, _e1_pha, _e1, _e2, _r100, _r20_ph.
+    dcm2niix produces multiple outputs from Philips DREAM B1 sequences.
+    The exact suffixes depend on dcm2niix version:
     
-    We keep the magnitude (_e1a) and B1 field map, renaming them properly:
-      _e1a  -> TB1map (magnitude/anatomical from DREAM)  
-      _e1   -> kept as intermediate (magnitude FFE)
-      _e1_ph -> kept as intermediate (phase FFE)
-      _e1_pha -> kept as intermediate (phase B1)
-      
-    For the DREAM-specific outputs via PRIDE reconstruction:
-      The DREAMB1_combined series -> TB1map (already named by our mapping)
-      The DREAM_anat series -> magnitude (already named by our mapping)
+    Older versions (echo-based):
+      _e1    FID image (anatomical reference for coregistration) 
+      _e1a   B1-map in % of nominal B1 
+      _e1_ph B1 phase image 
+      _e2    STEAM image
     
-    For raw B1 dual-TR series, dcm2niix adds echo suffixes to our naming.
+    Newer versions (ratio-based):
+      (base) one of the outputs gets the base name
+      _ph    phase 
+      _r100  rescaled B1 
+      _r100_ph phase of rescaled 
+      _r20   another rescale 
+      _r20_ph phase 
+    
+    Currently we keep the B1 map as TB1map, keep the FID/anatomical
+    reference as magnitude companion, remove everything else.
     """
     prefix = sess.subses_prefix
-    
-    # pattern: look for B1-related files with dcm2niix echo/phase suffixes
-    # these have patterns like: {prefix}_acq-b1_run-{run}_TB1map_e1a.nii.gz
     b1_base = f"{prefix}_acq-b1_run-{run}_TB1map"
     
-    # mapping of dcm2niix suffixes to final BIDS names
-    # _e1a = magnitude (anatomical, B1-weighted)
-    # _e1  = magnitude (FFE) - not typically needed for BIDS
-    # _e1_ph = phase (FFE) - not typically needed for BIDS
-    # _e1_pha = phase (B1) - not typically needed for BIDS
-    suffix_targets = {
-        "_e1a":   f"{prefix}_acq-b1_run-{run}_TB1map",
-        "_e1_ph": None,    # remove or keep as-is
-        "_e1_pha": None,   # remove or keep as-is
-        "_e1":    None,    # intermediate, remove
-    }
+    # suffices to REMOVE (intermediate/phase/steam files)
+    remove_suffixes = [
+        "_e1_ph", "_e1_pha", "_e2",           
+        "_ph", "_r100_ph", "_r20_ph", "_r20",  
+    ]
+    
+    # suffixes to RENAME to TB1map (the actual B1 field map)
+    b1map_suffixes = ["_e1a", "_r100"]
+    
+    # suffixes to RENAME to magnitude companion (FID anatomical reference)
+    magnitude_base = f"{prefix}_acq-b1_run-{run}_magnitude"
+    magnitude_suffixes = ["_e1"]
     
     found_any = False
-    for dcm_suffix, target_base in suffix_targets.items():
+    
+    # removes non-wanted files
+    for dcm_suffix in remove_suffixes:
         for ext in [".nii.gz", ".json"]:
             src = fmap_dir / f"{b1_base}{dcm_suffix}{ext}"
             if not src.exists():
                 continue
-            
             found_any = True
-            
-            if target_base is None:
-                # remove intermediate files we don't need
-                logger.debug(f"  Removing intermediate B1 file: {src.name}")
-                src.unlink()
-                if ext == ".nii.gz":
-                    sess.remove_from_scans_tsv(f"fmap/{src.name}")
-            else:
-                dst = fmap_dir / f"{target_base}{ext}"
-                if dst.exists() and not force:
-                    logger.debug(f"  Target exists: {dst.name}")
-                    continue
-                if src.name != dst.name:
-                    sess.rename_file(src, dst)
-                    logger.info(f"  Renamed: {src.name} -> {dst.name}")
-                    if ext == ".nii.gz":
-                        sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+            logger.info(f"  Removing intermediate B1 file: {src.name}")
+            src.unlink()
+            if ext == ".nii.gz":
+                sess.remove_from_scans_tsv(f"fmap/{src.name}")
     
-    # also handle _r100 / _r20_ph pattern (different dcm2niix versions)
-    r_suffix_targets = {
-        "_r100":   f"{prefix}_acq-b1_run-{run}_TB1map",
-        "_r20_ph": None,  # remove phase map
-        "_r20":    None,  # remove
-    }
-    
-    for dcm_suffix, target_base in r_suffix_targets.items():
+    # renames B1 map (_e1a -> TB1map)
+    tb1_target = fmap_dir / f"{b1_base}.nii.gz"
+    for dcm_suffix in b1map_suffixes:
         for ext in [".nii.gz", ".json"]:
             src = fmap_dir / f"{b1_base}{dcm_suffix}{ext}"
             if not src.exists():
                 continue
-            
             found_any = True
-            
-            if target_base is None:
-                logger.debug(f"  Removing intermediate B1 file: {src.name}")
+            dst = fmap_dir / f"{b1_base}{ext}"
+            if dst.exists():
+                # if target already exists this is a duplicate, remove 
+                logger.info(f"  Removing duplicate B1 file: {src.name} (target exists)")
                 src.unlink()
                 if ext == ".nii.gz":
                     sess.remove_from_scans_tsv(f"fmap/{src.name}")
             else:
-                dst = fmap_dir / f"{target_base}{ext}"
-                if dst.exists() and not force:
-                    continue
-                if src.name != dst.name:
-                    sess.rename_file(src, dst)
-                    logger.info(f"  Renamed: {src.name} -> {dst.name}")
-                    if ext == ".nii.gz":
-                        sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+                sess.rename_file(src, dst)
+                logger.info(f"  Renamed: {src.name} -> {dst.name}")
+                if ext == ".nii.gz":
+                    sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+    
+    # rename FID/anatomical reference to magnitude companion
+    for dcm_suffix in magnitude_suffixes:
+        for ext in [".nii.gz", ".json"]:
+            src = fmap_dir / f"{b1_base}{dcm_suffix}{ext}"
+            if not src.exists():
+                continue
+            found_any = True
+            dst = fmap_dir / f"{magnitude_base}{ext}"
+            if dst.exists() and not force:
+                logger.debug(f"  Magnitude target exists: {dst.name}")
+                continue
+            sess.rename_file(src, dst)
+            logger.info(f"  Renamed: {src.name} -> {dst.name}")
+            if ext == ".nii.gz":
+                sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
     
     if not found_any:
         logger.debug(f"No B1 suffix cleanup needed for run-{run}")
@@ -218,23 +211,93 @@ def _fix_gre_maps(fmap_dir: Path, sess: Session, logger, run: int, force: bool) 
     """
     Fix GRE fieldmap/magnitude files.
     
-    dcm2niix numbered variants:
+    dcm2niix can add echo suffixes or numbered variants to the base name.
+    This function separates into proper BIDS fieldmap + magnitude files.
+    
+    BIDS does not allow the 'dir-' entity on fieldmap/magnitude
+    suffixes (only on epi). If the YAML config included dir-AP for a GRE
+    series, it is stripped from the final BIDS name here.
+    
+    Echo-based pattern:
+      {prefix}_acq-gre_dir-AP_run-{run}_fieldmap_e1a -> acq-gre_run-{run}_magnitude
+      {prefix}_acq-gre_dir-AP_run-{run}_fieldmap_e1  -> acq-gre_run-{run}_fieldmap
+      {prefix}_acq-gre_dir-AP_run-{run}_fieldmap_e1_ph -> remove
+    
+    Numbered pattern:
       {prefix}_acq-gre_run-{run}_fieldmap1 -> fieldmap
       {prefix}_acq-gre_run-{run}_fieldmap2 -> magnitude
-      
-    Also legacy heudiconv patterns:
-      {prefix}_acq-gre_dir-AP_run-{run}_epi1 -> fieldmap
-      {prefix}_acq-gre_dir-AP_run-{run}_epi2 -> magnitude
     """
     prefix = sess.subses_prefix
     
+    # target names never have dir- entity (not BIDS-valid for fieldmap/magnitude)
+    clean_fieldmap = f"{prefix}_acq-gre_run-{run}_fieldmap"
+    clean_magnitude = f"{prefix}_acq-gre_run-{run}_magnitude"
+    
+    # echo-based pattern (Philips B0mapShimmed)
+    # try various dir patterns since user config may have added dir-AP/PA
+    for base_suffix in ["fieldmap", "epi"]:
+        for dir_part in ["_dir-AP", "_dir-PA", ""]:
+            gre_base = f"{prefix}_acq-gre{dir_part}_run-{run}_{base_suffix}"
+            
+            # _e1a -> magnitude (anatomical echo)
+            for ext in [".nii.gz", ".json"]:
+                src = fmap_dir / f"{gre_base}_e1a{ext}"
+                if not src.exists():
+                    continue
+                dst = fmap_dir / f"{clean_magnitude}{ext}"
+                if dst.exists() and not force:
+                    continue
+                sess.rename_file(src, dst)
+                logger.info(f"Renamed: {src.name} -> {dst.name}")
+                if ext == ".nii.gz":
+                    sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+            
+            # _e1 -> fieldmap (strip echo suffix AND dir entity)
+            for ext in [".nii.gz", ".json"]:
+                src = fmap_dir / f"{gre_base}_e1{ext}"
+                if not src.exists():
+                    continue
+                dst = fmap_dir / f"{clean_fieldmap}{ext}"
+                if dst.exists() and not force:
+                    continue
+                sess.rename_file(src, dst)
+                logger.info(f"Renamed: {src.name} -> {dst.name}")
+                if ext == ".nii.gz":
+                    sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+            
+            # _e1_ph, _e2 -> remove
+            for remove_suffix in ["_e1_ph", "_e2", "_e2_ph"]:
+                for ext in [".nii.gz", ".json"]:
+                    src = fmap_dir / f"{gre_base}{remove_suffix}{ext}"
+                    if src.exists():
+                        logger.info(f"  Removing intermediate GRE file: {src.name}")
+                        src.unlink()
+                        if ext == ".nii.gz":
+                            sess.remove_from_scans_tsv(f"fmap/{src.name}")
+            
+            # also handle base file exists with dir- but no echo suffix
+            # (user config produced fieldmap with dir-AP, no echo split)
+            if dir_part:
+                for ext in [".nii.gz", ".json"]:
+                    src = fmap_dir / f"{gre_base}{ext}"
+                    dst = fmap_dir / f"{clean_fieldmap}{ext}"
+                    if not src.exists():
+                        continue
+                    if dst.exists() and not force:
+                        continue
+                    if src.name != dst.name:
+                        sess.rename_file(src, dst)
+                        logger.info(f"Renamed (stripped dir): {src.name} -> {dst.name}")
+                        if ext == ".nii.gz":
+                            sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+    
+    # numbered pattern 
     mappings = [
-        # dcm2niix numbered pattern
-        (f"{prefix}_acq-gre_run-{run}_fieldmap1", f"{prefix}_acq-gre_run-{run}_fieldmap"),
-        (f"{prefix}_acq-gre_run-{run}_fieldmap2", f"{prefix}_acq-gre_run-{run}_magnitude"),
+        (f"{prefix}_acq-gre_run-{run}_fieldmap1", clean_fieldmap),
+        (f"{prefix}_acq-gre_run-{run}_fieldmap2", clean_magnitude),
         # legacy heudiconv pattern
-        (f"{prefix}_acq-gre_dir-AP_run-{run}_epi1", f"{prefix}_acq-gre_run-{run}_fieldmap"),
-        (f"{prefix}_acq-gre_dir-AP_run-{run}_epi2", f"{prefix}_acq-gre_run-{run}_magnitude"),
+        (f"{prefix}_acq-gre_dir-AP_run-{run}_epi1", clean_fieldmap),
+        (f"{prefix}_acq-gre_dir-AP_run-{run}_epi2", clean_magnitude),
     ]
     
     for src_base, dst_base in mappings:
@@ -272,38 +335,3 @@ def _add_units_to_fieldmaps(fmap_dir: Path, sess: Session, logger, run: int) -> 
         sess.write_json(nii, meta)
         sess.make_readonly(json_f)
         logger.info(f"Added Units=rad/s to {json_f.name}")
-
-
-def _add_intended_for(fmap_dir: Path, func_dir: Path, sess: Session, logger, run: int) -> None:
-    prefix = sess.subses_prefix
-    
-    intended_for = []
-    for func_file in sorted(func_dir.glob(f"{prefix}_task-*_bold.nii.gz")):
-        rel_path = func_file.relative_to(sess.paths["rawdata_subject"])
-        intended_for.append(str(rel_path))
-    
-    if not intended_for:
-        return
-    
-    logger.info(f"Adding IntendedFor with {len(intended_for)} functional runs")
-    
-    for pattern in [
-        f"{prefix}_acq-b0_run-{run}_fieldmap",
-        f"{prefix}_acq-gre_run-{run}_fieldmap",
-        f"{prefix}_acq-se_dir-AP_run-{run}_epi",
-        f"{prefix}_acq-se_dir-PA_run-{run}_epi",
-    ]:
-        json_f = fmap_dir / f"{pattern}.json"
-        nii = fmap_dir / f"{pattern}.nii.gz"
-        if not json_f.exists():
-            continue
-        
-        meta = sess.get_json(nii)
-        if meta.get("IntendedFor") == intended_for:
-            continue
-        
-        sess.make_writable(json_f)
-        meta["IntendedFor"] = intended_for
-        sess.write_json(nii, meta)
-        sess.make_readonly(json_f)
-        logger.info(f"Updated IntendedFor in {json_f.name}")

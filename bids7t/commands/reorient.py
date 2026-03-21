@@ -1,4 +1,9 @@
-"""reorient - Reorient images to standard orientation using FSL or nibabel."""
+"""
+reorient command. reorients images to LPI orientation using FSL or nibabel.
+
+for more information about this see: 
+https://github.com/tknapen/tknapen.github.io/wiki/Anatomical-workflows#coordinate-systems-across-software-packages
+"""
 
 import subprocess
 from pathlib import Path

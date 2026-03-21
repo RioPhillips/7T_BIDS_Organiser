@@ -1,4 +1,4 @@
-"""run-all command - Run all conversion steps in sequence."""
+# run-all command. run all conversion steps in sequence
 
 from pathlib import Path
 from typing import Optional

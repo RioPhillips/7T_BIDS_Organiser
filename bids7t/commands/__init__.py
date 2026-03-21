@@ -1,4 +1,4 @@
-"""Command modules for bids7t CLI."""
+# command modules for bids7t CLI
 
 from .init import run_init
 from .dcm2src import run_dcm2src

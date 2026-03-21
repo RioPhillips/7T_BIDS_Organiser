@@ -4,10 +4,10 @@
 #   conda env create -f environment.yml
 #   conda activate bids7t
 #
-# For dev access (after cloning the repo):
+# For dev (after cloning the repo):
 #   conda env create -f environment.yml
 #   conda activate bids7t
-#   pip install -e .    # replaces the git install with editable
+#   pip install -e .    
 
 name: bids7t
 channels:
