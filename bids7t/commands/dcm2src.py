@@ -19,6 +19,10 @@ def run_dcm2src(
     log_file = sess.paths["logs"] / "dcm2src.log"
     logger = setup_logging("dcm2src", log_file, verbose)
     
+    # find dicomdir in config if not provided on command line
+    if dicom_dir is None:
+        dicom_dir = _resolve_dicomdir_from_config(studydir, logger)
+    
     session_label = f"_ses-{session}" if session else ""
     logger.info(f"Starting DICOM import for sub-{subject}{session_label}")
     logger.info(f"Input path: {dicom_dir}")
@@ -77,6 +81,25 @@ def run_dcm2src(
         if temp_dir and temp_dir.exists():
             logger.info(f"Cleaning up temp directory: {temp_dir}")
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _resolve_dicomdir_from_config(studydir: Path, logger) -> Path:
+    """Read dicomdir from bids7t.yaml when --dicom-dir is not provided."""
+    from bids7t.core import load_config
+    config = load_config(studydir)
+    dicomdir = config.get("dicomdir")
+    if dicomdir is None:
+        raise FileNotFoundError(
+            "No --dicom-dir provided and no 'dicomdir' in bids7t.yaml.\n"
+            "Either use '--dicom-dir /path/to/dicoms' or add:\n"
+            "  dicomdir: /path/to/dicoms\n"
+            "to code/bids7t.yaml."
+        )
+    path = Path(dicomdir)
+    if not path.exists():
+        raise FileNotFoundError(f"Can't find dicomdir in bids7t.yaml: {path}")
+    logger.info(f"Using dicomdir from config: {path}")
+    return path
 
 
 def _find_session_zips(directory: Path, subject: str, logger) -> List[Tuple[str, Path]]:

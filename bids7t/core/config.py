@@ -7,12 +7,12 @@ import yaml
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-MAX_SEARCH_DEPTH = 4
+MAX_SEARCH_DEPTH = 5
 _CONFIG_FILENAME = "bids7t.yaml"
 
 
 def find_config_from_cwd(max_depth: int = MAX_SEARCH_DEPTH) -> Optional[Path]:
-    """Search for code/bids7t.yaml from CWD upward."""
+    # searches for code/bids7t.yaml from CWD upward
     current = Path.cwd().resolve()
     for _ in range(max_depth):
         config_path = current / "code" / _CONFIG_FILENAME
@@ -26,7 +26,7 @@ def find_config_from_cwd(max_depth: int = MAX_SEARCH_DEPTH) -> Optional[Path]:
 
 
 def find_studydir_from_cwd(max_depth: int = MAX_SEARCH_DEPTH) -> Optional[Path]:
-    """Find study directory (parent of code/) from CWD upward."""
+    # find study directory (parent of code/) from CWD upward
     config_path = find_config_from_cwd(max_depth)
     if config_path:
         return config_path.parent.parent
@@ -34,7 +34,7 @@ def find_studydir_from_cwd(max_depth: int = MAX_SEARCH_DEPTH) -> Optional[Path]:
 
 
 def load_study_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
-    """Load the study config from a bids7t.yaml file."""
+    # loads the study config from a bids7t.yaml file
     if config_path is None:
         config_path = find_config_from_cwd()
     if config_path is None:
@@ -54,7 +54,7 @@ def load_study_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 def get_studydir(config_path: Optional[Path] = None) -> Path:
-    """Get the studydir from config or by searching from CWD."""
+    # get the studydir from config or by searching from CWD
     if config_path is None:
         config_path = find_config_from_cwd()
     if config_path is None:
@@ -74,7 +74,7 @@ def get_studydir(config_path: Optional[Path] = None) -> Path:
 
 
 def resolve_studydir(explicit_studydir: Optional[Path] = None) -> Path:
-    """Resolve studydir from explicit flag or CWD search."""
+    # resolves studydir from explicit flag or CWD search
     import click
     if explicit_studydir is not None:
         path = Path(explicit_studydir)

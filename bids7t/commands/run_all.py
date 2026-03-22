@@ -14,7 +14,11 @@ def run_all_steps(
     log_file = sess.paths["logs"] / "run_all.log"
     logger = setup_logging("run_all", log_file, verbose)
     
-    session_label = f"ses-{session}" if session else "(auto-detect)"
+    # resolve dicomdir from config if not provided on command line
+    if dicom_dir is None:
+        dicom_dir = _resolve_dicomdir(studydir, logger)
+    
+    session_label = f"ses-{session}" if session else "(detect from files)"
     
     logger.info("=" * 60)
     logger.info(f"Starting full conversion pipeline")
@@ -41,7 +45,7 @@ def run_all_steps(
                       dicom_dir=dicom_dir, force=force, verbose=verbose)
         logger.info("dcm2src completed")
     else:
-        logger.info("No --dicom-dir provided, skipping dcm2src (assuming sourcedata exists)")
+        logger.info("No --dicom-dir and no dicomdir in config, skipping dcm2src")
     
     # re-detect sessions after dcm2src may have created session directories
     # this is for when session=None and dcm2src processed multiple session zips
@@ -90,8 +94,25 @@ def run_all_steps(
     
     logger.info("")
     logger.info("=" * 60)
-    logger.info("Conversione completed successfully!")
+    logger.info("Pipeline completed successfully!")
     logger.info("=" * 60)
+
+
+def _resolve_dicomdir(studydir, logger):
+    # tries to read dicomdir from bids7t.yaml. Returns None if not configured
+    try:
+        from bids7t.core import load_config
+        config = load_config(studydir)
+        dicomdir = config.get("dicomdir")
+        if dicomdir:
+            path = Path(dicomdir)
+            if path.exists():
+                logger.info(f"Using dicomdir from config: {path}")
+                return path
+            logger.warning(f"No dicomdir in config: {path}")
+    except Exception:
+        pass
+    return None
 
 
 def _run_init(studydir, subject, session, dicom_dir, force, verbose):
