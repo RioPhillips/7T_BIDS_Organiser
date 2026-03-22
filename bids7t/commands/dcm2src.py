@@ -1,13 +1,11 @@
-"""
-dcm2src command to import DICOMs to sourcedata directory.
+# dcm2src command to import DICOMs to sourcedata directory.
+# handles zip file inputs and organizes DICOMs into the BIDS sourcedata structure.
 
-Handles zip file inputs and organizes DICOMs into the BIDS sourcedata structure.
-"""
-
+import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from bids7t.core import Session, setup_logging, run_command, check_outputs_exist
 
@@ -24,6 +22,27 @@ def run_dcm2src(
     session_label = f"_ses-{session}" if session else ""
     logger.info(f"Starting DICOM import for sub-{subject}{session_label}")
     logger.info(f"Input path: {dicom_dir}")
+    
+    # when session=None, check if dicom_dir has multiple session-specific zips
+    # --> process each one into the correct session directory
+    if session is None and dicom_dir is not None and Path(dicom_dir).is_dir():
+        session_zips = _find_session_zips(Path(dicom_dir), subject, logger)
+        if len(session_zips) > 1:
+            logger.info(f"Found {len(session_zips)} session-specific zips, processing each")
+            all_created = []
+            for ses_id, zip_path in session_zips:
+                logger.info(f"Processing session {ses_id} from {zip_path.name}")
+                ses_sess = Session(studydir, subject, ses_id, dicom_dir)
+                ses_sess.ensure_directories("sourcedata", "logs")
+                created = _import_single_zip(
+                    zip_path=zip_path, sess=ses_sess,
+                    force=force, logger=logger
+                )
+                all_created.extend(created)
+            logger.info(f"Imported {len(all_created)} DICOM files across {len(session_zips)} sessions")
+            return all_created
+    
+    # standard single-session/single-zip 
     logger.info(f"Target: {sess.paths['sourcedata']}")
     
     sourcedata_dir = sess.paths["sourcedata"]
@@ -57,6 +76,68 @@ def run_dcm2src(
     finally:
         if temp_dir and temp_dir.exists():
             logger.info(f"Cleaning up temp directory: {temp_dir}")
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _find_session_zips(directory: Path, subject: str, logger) -> List[Tuple[str, Path]]:
+    """
+    Find all session-specific zip files for a subject in a directory.
+    
+    Looks for patterns like:
+      sub-S01_ses-MR1*.zip, sub-S01_ses-MR2*.zip
+      S01_ses-MR1*.zip, S01_MR1*.zip
+    
+    Returns list of (session_id, zip_path) tuples, sorted by session.
+    Returns empty list if no session pattern detected.
+    """
+    all_zips = sorted(directory.glob("*.zip"))
+    if not all_zips:
+        return []
+    
+    # find zips matching this subject that contain a ses- identifier
+    ses_pattern = re.compile(
+        rf"(?:sub-)?{re.escape(subject)}.*?ses-([A-Za-z0-9]+)",
+        re.IGNORECASE
+    )
+    
+    found = []
+    for zip_file in all_zips:
+        if subject.lower() not in zip_file.name.lower():
+            continue
+        m = ses_pattern.search(zip_file.name)
+        if m:
+            ses_id = m.group(1)
+            found.append((ses_id, zip_file))
+    
+    # only return if we found multiple. single zip is handled already
+    if len(found) <= 1:
+        return []
+    
+    logger.info(f"Found session zips: {[(s, z.name) for s, z in found]}")
+    return sorted(found, key=lambda x: x[0])
+
+
+def _import_single_zip(zip_path: Path, sess: Session, force: bool, logger) -> List[Path]:
+    # extracts a single zip file into the session's sourcedata directory
+    sourcedata_dir = sess.paths["sourcedata"]
+    
+    if sourcedata_dir.exists() and any(sourcedata_dir.iterdir()):
+        if not force:
+            existing = list(sourcedata_dir.rglob("*.dcm"))
+            logger.info(f"Sourcedata folder exists for ses-{sess.session} ({len(existing)} files), skipping")
+            return existing
+        shutil.rmtree(sourcedata_dir)
+    
+    sourcedata_dir.mkdir(parents=True, exist_ok=True)
+    
+    temp_dir = sourcedata_dir.parent / f"temp_{sess.subject}_ses-{sess.session}"
+    try:
+        dicom_source = _extract_zip(zip_path, temp_dir, logger)
+        created_files = _convert_to_sourcedata(sess, dicom_source, logger)
+        logger.info(f"  Imported {len(created_files)} DICOMs for ses-{sess.session}")
+        return created_files
+    finally:
+        if temp_dir.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 

@@ -55,10 +55,10 @@ def run_fixfmap(
         # B1 DREAM maps: clean dcm2niix multi-output suffixes
         _fix_b1_suffixes(fmap_dir, sess, logger, run, force)
         
-        # B0 shimmed fieldmaps: numbered variants
+        # B0 shimmed fieldmaps: numbered variants + echo suffixes
         _fix_b0_maps(fmap_dir, sess, logger, run, force)
         
-        # GRE fieldmaps: numbered variants
+        # GRE fieldmaps: numbered variants + echo suffixes
         _fix_gre_maps(fmap_dir, sess, logger, run, force)
         
         # Units metadata
@@ -173,24 +173,62 @@ def _fix_b1_suffixes(fmap_dir: Path, sess: Session, logger, run: int, force: boo
 
 def _fix_b0_maps(fmap_dir: Path, sess: Session, logger, run: int, force: bool) -> None:
     """
-    Fix B0 shimmed fieldmap files.
+    Cleans B0 shimmed fieldmap files.
     
-    dcm2niix can produce numbered variants when a series has multiple outputs:
+    dcm2niix can produce numbered variants or echo suffixes:
       {prefix}_acq-b0_run-{run}_fieldmap1 -> magnitude
       {prefix}_acq-b0_run-{run}_fieldmap2 -> fieldmap
+      {prefix}_acq-b0_run-{run}_fieldmap_e1a -> magnitude (echo-based)
+      {prefix}_acq-b0_run-{run}_fieldmap_e1  -> fieldmap (echo-based)
+      {prefix}_acq-b0_run-{run}_fieldmap_e1_ph -> remove (phase)
     """
     prefix = sess.subses_prefix
+    b0_base = f"{prefix}_acq-b0_run-{run}_fieldmap"
+    clean_fieldmap = b0_base
+    clean_magnitude = f"{prefix}_acq-b0_run-{run}_magnitude"
     
-    # numbered variants pattern
+    # echo-based pattern (_e1a -> magnitude, _e1 -> fieldmap)
+    for ext in [".nii.gz", ".json"]:
+        src = fmap_dir / f"{b0_base}_e1a{ext}"
+        if src.exists():
+            dst = fmap_dir / f"{clean_magnitude}{ext}"
+            if not dst.exists() or force:
+                sess.rename_file(src, dst)
+                logger.info(f"Renamed: {src.name} -> {dst.name}")
+                if ext == ".nii.gz":
+                    sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+    
+    for ext in [".nii.gz", ".json"]:
+        src = fmap_dir / f"{b0_base}_e1{ext}"
+        if src.exists():
+            dst = fmap_dir / f"{clean_fieldmap}{ext}"
+            if not dst.exists() or force:
+                sess.rename_file(src, dst)
+                logger.info(f"Renamed: {src.name} -> {dst.name}")
+                if ext == ".nii.gz":
+                    sess.rename_in_scans_tsv(f"fmap/{src.name}", f"fmap/{dst.name}")
+    
+    # remove phase/intermediate echo files
+    for remove_suffix in ["_e1_ph", "_e2", "_e2_ph"]:
+        for ext in [".nii.gz", ".json"]:
+            src = fmap_dir / f"{b0_base}{remove_suffix}{ext}"
+            if src.exists():
+                logger.info(f"  Removing intermediate B0 file: {src.name}")
+                src.unlink()
+                if ext == ".nii.gz":
+                    sess.remove_from_scans_tsv(f"fmap/{src.name}")
+    
+    # patterns for the numbered variants
     mappings = [
-        (f"{prefix}_acq-b0_run-{run}_fieldmap1", f"{prefix}_acq-b0_run-{run}_magnitude"),
-        (f"{prefix}_acq-b0_run-{run}_fieldmap2", f"{prefix}_acq-b0_run-{run}_fieldmap"),
+        (f"{b0_base}1", clean_magnitude),
+        (f"{b0_base}2", clean_fieldmap),
     ]
     
-    # also check the old heudiconv-style b0-combined pattern
+    # old heudiconv-style b0-combined pattern
+    # just keeping for redundancy for now
     mappings.extend([
-        (f"{prefix}_run-{run}_b0-combined1", f"{prefix}_acq-b0_run-{run}_magnitude"),
-        (f"{prefix}_run-{run}_b0-combined2", f"{prefix}_acq-b0_run-{run}_fieldmap"),
+        (f"{prefix}_run-{run}_b0-combined1", clean_magnitude),
+        (f"{prefix}_run-{run}_b0-combined2", clean_fieldmap),
     ])
     
     for src_base, dst_base in mappings:
