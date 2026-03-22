@@ -47,7 +47,7 @@ def run_all_steps(
     
     for step_name, step_func in steps:
         logger.info("")
-        logger.info(f">>> Step: {step_name}")
+        logger.info(f">>> Command: {step_name}")
         logger.info("-" * 40)
         try:
             step_func(studydir=studydir, subject=subject, session=session,

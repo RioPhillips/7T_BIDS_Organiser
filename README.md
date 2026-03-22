@@ -208,7 +208,7 @@ Most commands can be called directly or via the `bids7t` group:
 
 ## Session Support
 
-`--session` is optional. Omit it for single-session studies or to do the conversion for all session present in sourcedata/.
+`--session` is optional. Omit it for single-session studies or to do the conversion for all session present in `sourcedata/`.
 
 **With session:** `src2rawdata --subject S01 --session MR1`
 ```
