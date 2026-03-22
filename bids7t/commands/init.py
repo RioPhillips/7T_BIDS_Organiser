@@ -34,7 +34,7 @@ def run_init(
     rawdata_root = studydir / "rawdata"
     rawdata_root.mkdir(parents=True, exist_ok=True)
     
-    log_dir = studydir / "derivatives" / "logs"
+    log_dir = studydir / "derivatives" / "logs" /"bids7t" 
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "init.log"
     logger = setup_logging("init", log_file, verbose)

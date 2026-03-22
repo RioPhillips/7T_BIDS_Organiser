@@ -45,11 +45,11 @@ class Session:
         if self.has_session:
             rd = base / "rawdata" / self.sub_prefix / self.ses_prefix
             sd = base / "sourcedata" / self.sub_prefix / self.ses_prefix
-            ld = base / "derivatives" / "logs" / self.sub_prefix / self.ses_prefix
+            ld = base / "derivatives" / "logs" / "bids7t" / self.sub_prefix / self.ses_prefix
         else:
             rd = base / "rawdata" / self.sub_prefix
             sd = base / "sourcedata" / self.sub_prefix
-            ld = base / "derivatives" / "logs" / self.sub_prefix
+            ld = base / "derivatives" / "logs" / "bids7t" / self.sub_prefix
         return {
             "rawdata": rd, "rawdata_subject": base / "rawdata" / self.sub_prefix,
             "rawdata_root": base / "rawdata", "sourcedata": sd,

@@ -404,7 +404,7 @@ def _format_sessions(sessions: list) -> str:
 
 def _check_bids_status(studydir: Path, subject: str, sessions: list) -> str:
     # checks BIDS validation status from existing log files
-    logs_base = studydir / "derivatives" / "logs" / f"sub-{subject}"
+    logs_base = studydir / "derivatives" / "logs" / "bids7t" / f"sub-{subject}"
     
     # all validation logs for the subject
     log_files = []
