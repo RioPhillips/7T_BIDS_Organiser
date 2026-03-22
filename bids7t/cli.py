@@ -285,9 +285,9 @@ def run_all(studydir, subject, session, force, verbose, dicom_dir,
               default=None, help='Path to BIDS study directory (default: will search in CWD)')
 @click.option('--verbose', '-v', is_flag=True, default=False)
 def status(studydir, verbose):
-    """
-    Show study status: subjects, BIDS validation, DICOM files not yet imported.
-    """
+    
+    # show study status: subjects, BIDS validation, DICOM files not yet imported.
+    
     from bids7t.core import find_config_from_cwd, find_studydir_from_cwd, load_study_config
     
     click.echo("bids7t status")
@@ -331,9 +331,9 @@ def status(studydir, verbose):
         ("sourcedata/", (studydir / "sourcedata").exists()),
     ]
     
-    click.echo("Study files:")
+    click.echo("Folders in the studyr directory:")
     for name, exists in checks:
-        mark = "OK" if exists else "MISSING"
+        mark = "OK" if exists else "Not found"
         click.echo(f"  [{mark:7s}] {name}")
     
     # show config details in verbose mode
@@ -386,7 +386,7 @@ def _scan_rawdata(rawdata: Path) -> dict:
         if ses_dirs:
             subjects[sub_id] = [d.name[4:] for d in ses_dirs]
         else:
-            # single-session: check if there are modality dirs (anat/, func/, etc.)
+            # single-session: check if there are modality subdirs (anat/, func/, etc.)
             has_data = any(
                 d.is_dir() and d.name in ("anat", "func", "fmap", "dwi")
                 for d in sub_dir.iterdir()
