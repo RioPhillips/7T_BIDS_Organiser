@@ -2,8 +2,44 @@
 
 DICOM to BIDS conversion tools for 7T MRI data.
 
-Converts raw DICOM files from Philips 7T MRI scanners to BIDS-compliant
-directory structures using dcm2niix directly. 
+Acts as a wrapper for [dcm2niix](https://github.com/rordenlab/dcm2niix?tab=readme-ov-file#dcm2niix) converting raw DICOM files from the Philips 7T scanner to a BIDS-compliant directory structure. 
+
+After running, the structure should look something like:
+```
+Studydir:
+.
+├── code
+│   ├── bids7t.yaml
+│   └── mp2rage.yaml
+│   └── logs
+│       └── bids7t
+│           └── sub-S01
+├── rawdata
+│   ├── CHANGES
+│   ├── dataset_description.json
+│   ├── participants.json
+│   ├── participants.tsv
+│   ├── README
+│   ├── sub-S01
+│   │   ├── ses-MR1
+│   │   │   ├── anat
+│   │   │   ├── dwi
+│   │   │   ├── fmap
+│   │   │   ├── func
+│   │   │   ├── sub-S01_ses-MR1_scans.json
+│   │   │   └── sub-S01_ses-MR1_scans.tsv
+│   │   └── ses-MR2
+│   │       ├── anat
+│   │       ├── fmap
+│   │       ├── func
+│   │       ├── sub-S01_ses-MR2_scans.json
+│   │       └── sub-S01_ses-MR2_scans.tsv
+│   └── task-XXX_bold.json
+└── sourcedata
+    └── sub-S01
+        ├── ses-MR1
+        └── ses-MR2
+```
 
 ## Installation
 
@@ -57,11 +93,11 @@ pip install -e ".[dev]"
 | FSL |
 | Docker (For BIDS validator and MRIQC containers)|
 
-The pipeline works without FSL and Docker. The minimum viable setup is just dcm2niix + the Python packages.
+The package works without FSL and Docker. The minimum viable setup is just dcm2niix + the Python packages.
 
 ## Quick Start
 
-### 1. Set up study directory
+### 1. Set up a study directory
 
 ```bash
 mkdir -p my_study/code
@@ -78,7 +114,8 @@ match your sourcedata directory names.
 <summary>Template for single-session study</summary>
 
 ```yaml
-studydir: /path/to/my_study
+studydir: /path/to/studydir
+dicomdir: /path/to/dicomdir
 
 epi_ap_phase_enc_dir: "j-"
 orientation: LPI
@@ -136,10 +173,6 @@ series:
 ```
 </details>
 
-Full example configs for both 7T049 and 7T079 studies are in the
-[examples/](https://github.com/RioPhillips/7T_BIDS_Organiser/tree/main/examples)
-directory of the repository.
-
 ### 3. Create `code/mp2rage.yaml` (if using MP2RAGE)
 
 ```yaml
@@ -153,16 +186,19 @@ FlipAngle: [6, 8]
 ### 4. Run
 
 ```bash
-cd /path/to/my_study
+cd /path/to/studydir
 
 # Initialize BIDS top-level files
 bids7t init
+
+# Check that the directories are setup correctly
+bids7t status
 
 # Process a subject
 run-all --subject 7T049S14 --dicom-dir /path/to/dicoms
 
 # Process a subjects specific session
-run-all --subject S01 --session MR1 --dicom-dir /path/to/dicoms
+run-all --subject S01 --session MR1
 ```
 
 Or step by step:
@@ -177,21 +213,23 @@ reorient --subject S01
 slicetime --subject S01
 ```
 
+Throughout the conversion, call `bids7t status` to view and track the status of subjects. 
+
 ## Commands
 
 Most commands can be called directly or via the `bids7t` group:
 
 | Command | Description |
 |---------|-------------|
-| `bids7t init` | Create BIDS top-level files (once per study) |
+| `bids7t init` | Creates BIDS top-level files (once per study) |
 | `dcm2src` | Import DICOMs to sourcedata  |
 | `src2rawdata` | Convert sourcedata to BIDS rawdata using dcm2niix |
-| `fixanat` | Fix MP2RAGE files (split, mag/phase, metadata) |
-| `fixfmap` | Fix fieldmap files (B0, B1/DREAM, GRE naming) |
+| `fixanat` | MP2RAGE files (split, mag/phase, metadata) |
+| `fixfmap` | fieldmap files (B0, B1/DREAM, GRE naming) |
 | `fixepi` | Fix EPI metadata (PhaseEncodingDirection, TotalReadoutTime) |
 | `reorient` | Reorient images to a specific orientation |
 | `slicetime` | Slice timing correction |
-| `run-all` | Run all steps in sequence |
+| `run-all` | Run all commands in sequence |
 | `bids7t validate` | Run BIDS validator (Docker) |
 | `bids7t qc` | Run MRIQC quality control (Docker) |
 | `bids7t status` | Show study configuration |
