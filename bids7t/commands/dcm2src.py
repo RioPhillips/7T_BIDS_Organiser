@@ -3,6 +3,7 @@
 
 import re
 import shutil
+import os
 import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -66,6 +67,7 @@ def run_dcm2src(
         zip_input=zip_input, logger=logger
     )
     
+    created_files = []
     try:
         if zip_file:
             temp_suffix = f"_{subject}"
@@ -73,14 +75,17 @@ def run_dcm2src(
                 temp_suffix += f"_ses-{session}"
             temp_dir = sourcedata_dir.parent / f"temp{temp_suffix}"
             dicom_source = _extract_zip(zip_file, temp_dir, logger)
-        
+
         created_files = _convert_to_sourcedata(sess, dicom_source, logger)
         logger.info(f"Successfully imported {len(created_files)} DICOM files")
         return created_files
     finally:
         if temp_dir and temp_dir.exists():
-            logger.info(f"Cleaning up temp directory: {temp_dir}")
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            if len(created_files) > 0:
+                logger.info(f"Cleaning up temp directory: {temp_dir}")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            else:
+                logger.warning(f"Keeping temp directory because conversion produced 0 DICOMs: {temp_dir}")
 
 
 def _resolve_dicomdir_from_config(studydir: Path, logger) -> Path:
@@ -154,6 +159,7 @@ def _import_single_zip(zip_path: Path, sess: Session, force: bool, logger) -> Li
     sourcedata_dir.mkdir(parents=True, exist_ok=True)
     
     temp_dir = sourcedata_dir.parent / f"temp_{sess.subject}_ses-{sess.session}"
+    created_files = []
     try:
         dicom_source = _extract_zip(zip_path, temp_dir, logger)
         created_files = _convert_to_sourcedata(sess, dicom_source, logger)
@@ -161,7 +167,10 @@ def _import_single_zip(zip_path: Path, sess: Session, force: bool, logger) -> Li
         return created_files
     finally:
         if temp_dir.exists():
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            if len(created_files) > 0:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            else:
+                logger.warning(f"Keeping temp directory because conversion produced 0 DICOMs: {temp_dir}")
 
 
 def _resolve_input(dicom_dir, subject, session, zip_input, logger):
@@ -231,37 +240,62 @@ def _find_zip_file(directory, subject, session, logger):
 
 
 def _extract_zip(zip_path, target_dir, logger):
-    if not zip_path.exists():
+    zip_path = Path(zip_path)
+    target_dir = Path(target_dir)
+
+    if not zip_path.is_file():
         raise FileNotFoundError(f"Zip file not found: {zip_path}")
+
     if target_dir.exists():
         shutil.rmtree(target_dir)
-    target_dir.mkdir(parents=True)
-    
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
     logger.info(f"Extracting {zip_path.name} to {target_dir}")
-    cmd = ["unzip", "-q", "-o", str(zip_path), "-d", str(target_dir)]
+    cmd = ["unzip", "-q", str(zip_path), "-d", str(target_dir)]
     result = subprocess.run(cmd, capture_output=True, text=True)
-    
+
     if result.returncode not in (0, 1, 81):
-        if "password" in (result.stderr or "").lower():
+        stderr = (result.stderr or "").lower()
+        if "password" in stderr:
             raise RuntimeError(f"Zip file appears to be encrypted: {zip_path}")
         raise RuntimeError(f"Failed to extract {zip_path}: {result.stderr}")
-    
+
     return _find_dicom_root(target_dir, logger)
 
 
 def _find_dicom_root(extracted_dir, logger):
-    dcm_files = list(extracted_dir.glob("*.dcm")) + list(extracted_dir.glob("*.DCM"))
-    if dcm_files:
+
+    extracted_dir = Path(extracted_dir)
+
+    dicom_files = list(extracted_dir.rglob("*.dcm")) + list(extracted_dir.rglob("*.DCM"))
+
+    if not dicom_files:
+        logger.warning(f"No .dcm files found under {extracted_dir}; using root")
         return extracted_dir
-    for depth in range(1, 4):
-        pattern = "/".join(["*"] * depth)
-        for subdir in extracted_dir.glob(pattern):
-            if subdir.is_dir():
-                dcm_files = list(subdir.glob("*.dcm")) + list(subdir.glob("*.DCM"))
-                if dcm_files:
-                    return subdir
-    logger.warning("No .dcm files found in extracted directory, using root")
-    return extracted_dir
+
+    # first candidate is a dir literally named "DICOM"
+    dicom_dirs = [p for p in extracted_dir.rglob("*") if p.is_dir() and p.name.lower() == "dicom"]
+
+    def count_dicom_files(root: Path) -> int:
+        return sum(1 for _ in root.rglob("*.dcm")) + sum(1 for _ in root.rglob("*.DCM"))
+
+    if dicom_dirs:
+        
+        chosen = max(dicom_dirs, key=count_dicom_files)
+        n = count_dicom_files(chosen)
+        logger.info(f"Using DICOM directory: {chosen} ({n} DICOM files found beneath it)")
+        return chosen
+
+    # as a fallback: use the common parent of all DICOM file parents
+    parents = [str(f.parent) for f in dicom_files]
+    common_parent = Path(os.path.commonpath(parents))
+
+    logger.info(
+        f"Using DICOM directory: {common_parent} "
+        f"({len(dicom_files)} DICOM files found beneath it)"
+    )
+    return common_parent
 
 
 def _convert_to_sourcedata(sess, dicom_dir, logger):
