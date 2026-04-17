@@ -261,6 +261,23 @@ def _extract_zip(zip_path, target_dir, logger):
             raise RuntimeError(f"Zip file appears to be encrypted: {zip_path}")
         raise RuntimeError(f"Failed to extract {zip_path}: {result.stderr}")
 
+    # if it contains another zip (for example export.zip), unpack that too and search.
+    # some imported dicomdirs have multiple levels of zips for some reason 
+    nested_zips = sorted(target_dir.rglob("*.zip"))
+    for nested_zip in nested_zips:
+        nested_dir = nested_zip.with_suffix("")  # export.zip -> export
+        logger.info(f"Found nested zip: {nested_zip.name}, extracting it")
+        nested_dir.mkdir(parents=True, exist_ok=True)
+
+        nested_cmd = ["unzip", "-q", str(nested_zip), "-d", str(nested_dir)]
+        nested_result = subprocess.run(nested_cmd, capture_output=True, text=True)
+
+        if nested_result.returncode not in (0, 1, 81):
+            stderr = (nested_result.stderr or "").lower()
+            if "password" in stderr:
+                raise RuntimeError(f"Nested zip file appears to be encrypted: {nested_zip}")
+            raise RuntimeError(f"Failed to extract nested zip {nested_zip}: {nested_result.stderr}")
+
     return _find_dicom_root(target_dir, logger)
 
 
