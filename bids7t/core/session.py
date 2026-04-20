@@ -11,6 +11,16 @@ import stat
 import csv
 from typing import Optional, Dict, Any, List
 
+from bids7t.core.bids_naming import (
+    parse_bids_name,
+    build_bids_name,
+    derive_bids_name,
+    classify_dcm2niix_output,
+    strip_dcm2niix_suffix,
+    has_dcm2niix_suffix,
+    entities_match,
+)
+
 logger = logging.getLogger(__name__)
 
 _CONFIG_FILENAME = "bids7t.yaml"
@@ -131,6 +141,197 @@ class Session:
     def rel_path(self, abs_path: Path) -> str:
         return str(Path(abs_path).relative_to(self.paths["rawdata"]))
     
+    # ================================================================
+    # BIDS name discovery
+    # ================================================================
+    
+    def find_by_suffix(self, modality: str, suffix: str,
+                       entity_filter: Optional[Dict[str, str]] = None,
+                       extension: str = '*.nii.gz',
+                       include_dcm2niix: bool = True) -> List[Path]:
+        """
+        Find files in a modality directory matching a BIDS suffix.
+        
+        This is the primary discovery method for fix commands. Instead of
+        hardcoding filenames like ``f"{prefix}_acq-b1_run-{run}_TB1map"``,
+        commands should use::
+        
+            sess.find_by_suffix("fmap", "TB1map")
+        
+        This finds TB1map files regardless of what entities the user
+        configured in bids7t.yaml (acq-b1, acq-dream, desc-whatever, etc).
+        
+        Parameters
+        ----------
+        modality : str
+            BIDS modality directory: 'anat', 'func', 'fmap', 'dwi'
+        suffix : str
+            BIDS suffix to match: 'MP2RAGE', 'TB1map', 'bold', etc.
+        entity_filter : dict, optional
+            Entity key-value pairs that must ALL be present.
+            Example: ``{'inv': '1and2'}`` finds only inv-1and2 files.
+        extension : str
+            Glob pattern for file extension (default '*.nii.gz').
+            Use '*.json' for sidecar files.
+        include_dcm2niix : bool
+            If True (default), also returns files with dcm2niix-appended
+            suffixes (like _real, _e1a). If False, only returns clean
+            BIDS names.
+        
+        Returns
+        -------
+        list of Path
+            Matching files, sorted alphabetically.
+        
+        Examples
+        --------
+        Find all MP2RAGE files with combined inversions::
+        
+            sess.find_by_suffix("anat", "MP2RAGE", {"inv": "1and2"})
+        
+        Find all TB1map files (any acq entity the user chose)::
+        
+            sess.find_by_suffix("fmap", "TB1map")
+        
+        Find all bold files for a specific task::
+        
+            sess.find_by_suffix("func", "bold", {"task": "rest"})
+        """
+        mod_dir = self.paths.get(modality)
+        if mod_dir is None or not mod_dir.exists():
+            return []
+        
+        results = []
+        for f in sorted(mod_dir.glob(extension)):
+            parsed = parse_bids_name(f.name)
+            
+            if parsed['suffix'] != suffix:
+                continue
+            
+            # skip dcm2niix-suffixed files if not wanted
+            if not include_dcm2niix and parsed['dcm2niix_extra']:
+                continue
+            
+            # check entity filter
+            if entity_filter:
+                match = True
+                for key, val in entity_filter.items():
+                    if parsed['entities'].get(key) != str(val):
+                        match = False
+                        break
+                if not match:
+                    continue
+            
+            results.append(f)
+        
+        return results
+    
+    def find_by_suffix_parsed(self, modality: str, suffix: str,
+                              entity_filter: Optional[Dict[str, str]] = None,
+                              extension: str = '*.nii.gz',
+                              include_dcm2niix: bool = True
+                              ) -> List[Dict]:
+        """
+        Like find_by_suffix but returns parsed results with classification.
+        
+        Each result dict has all fields from ``parse_bids_name()`` plus:
+        - 'path': full Path object
+        - 'classification': dcm2niix output classification (or None)
+        
+        Useful when fix commands need to inspect entities or dcm2niix
+        classification to decide what to do with each file.
+        
+        Returns
+        -------
+        list of dict
+            Each dict contains parse_bids_name() output plus 'path'
+            and 'classification'.
+        """
+        files = self.find_by_suffix(
+            modality, suffix, entity_filter, extension, include_dcm2niix
+        )
+        results = []
+        for f in files:
+            parsed = parse_bids_name(f.name)
+            parsed['path'] = f
+            parsed['classification'] = classify_dcm2niix_output(f.name)
+            results.append(parsed)
+        return results
+    
+    def derive_name(self, source_filename: str,
+                    extension: Optional[str] = None,
+                    remove_entities: Optional[List[str]] = None,
+                    **overrides) -> str:
+        """
+        Create a derived BIDS filename preserving user entities.
+        
+        Convenience wrapper around ``derive_bids_name()`` — see that
+        function for full documentation.
+        
+        Parameters
+        ----------
+        source_filename : str
+            Source filename to derive from.
+        extension : str, optional
+            Override extension. None keeps source extension.
+        remove_entities : list, optional
+            Entity keys to remove.
+        **overrides
+            Entity or suffix overrides.
+        
+        Returns
+        -------
+        str
+            New BIDS filename.
+        
+        Examples
+        --------
+        Split inv-1and2 into inv-1, preserving all user entities::
+        
+            new_name = sess.derive_name(
+                'sub-S01_run-1_inv-1and2_desc-EP_MP2RAGE.nii.gz',
+                inv='1', part='mag'
+            )
+            # -> 'sub-S01_run-1_inv-1_part-mag_desc-EP_MP2RAGE.nii.gz'
+        """
+        return derive_bids_name(
+            source_filename, extension=extension,
+            remove_entities=remove_entities, **overrides
+        )
+    
+    def group_by_run(self, modality: str, suffix: str,
+                     entity_filter: Optional[Dict[str, str]] = None
+                     ) -> Dict[str, List[Path]]:
+        """
+        Group files by their run entity value.
+        
+        Returns a dict where keys are run values (e.g. '1', '2')
+        and values are lists of matching file paths.
+        
+        Files without a run entity are grouped under key 'none'.
+        
+        Parameters
+        ----------
+        modality : str
+            BIDS modality directory.
+        suffix : str
+            BIDS suffix to match.
+        entity_filter : dict, optional
+            Additional entity filters.
+        
+        Returns
+        -------
+        dict
+            {run_value: [Path, ...]}
+        """
+        files = self.find_by_suffix(modality, suffix, entity_filter)
+        groups: Dict[str, List[Path]] = {}
+        for f in files:
+            parsed = parse_bids_name(f.name)
+            run_val = parsed['entities'].get('run', 'none')
+            groups.setdefault(run_val, []).append(f)
+        return groups
+    
     # --- scans.tsv ---
     
     def read_scans_tsv(self) -> tuple:
@@ -235,28 +436,51 @@ class Session:
 # Config loading - single bids7t.yaml for everything
 # ============================================================
 
-def load_config(studydir: Path) -> Dict[str, Any]:
+def load_config(studydir: Path,
+                config_path: Optional[Path] = None) -> Dict[str, Any]:
     """
     Load the study configuration from code/bids7t.yaml.
-    
-    This single YAML contains study settings, series mapping,
-    and processing options all in one place.
+
+    If ``config_path`` is provided, loads from that file instead of
+    the default. This supports per-session configs for pilot studies
+    with varying scan protocols::
+
+        run-all --subject 7T079C02 --session MR1 \\
+                --config code/bids7t_sub-7T079C02_ses-MR1.yaml
+
+    Parameters
+    ----------
+    studydir : Path
+        Path to the study directory.
+    config_path : Path, optional
+        Explicit path to a config file. Overrides the default
+        ``code/bids7t.yaml``.
     """
-    config_path = Path(studydir) / "code" / _CONFIG_FILENAME
-    if not config_path.exists():
-        logger.warning(f"No {_CONFIG_FILENAME} found at {config_path}")
+    if config_path is not None:
+        config_path = Path(config_path)
+        if not config_path.exists():
+            logger.error(f"Config file not found: {config_path}")
+            return {}
+        logger.info(f"Using config: {config_path}")
+        with open(config_path) as f:
+            return yaml.safe_load(f) or {}
+
+    default_path = Path(studydir) / "code" / _CONFIG_FILENAME
+    if not default_path.exists():
+        logger.warning(f"No {_CONFIG_FILENAME} found at {default_path}")
         return {}
-    with open(config_path) as f:
+    with open(default_path) as f:
         return yaml.safe_load(f) or {}
 
 
-def get_series_mapping(studydir: Path, config: Optional[Dict] = None) -> Optional[List[Dict]]:
-    """Get the 'series' list from bids7t.yaml."""
+def get_series_mapping(studydir: Path, config: Optional[Dict] = None,
+                       config_path: Optional[Path] = None) -> Optional[List[Dict]]:
+    """Get the 'series' list from the config."""
     if config is None:
-        config = load_config(studydir)
+        config = load_config(studydir, config_path=config_path)
     series = config.get("series")
     if series is None:
-        logger.warning("No 'series' key found in bids7t.yaml")
+        logger.warning("No 'series' key found in config")
     return series
 
 
