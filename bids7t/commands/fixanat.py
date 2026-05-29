@@ -390,29 +390,47 @@ def _compute_mag_phase(anat_dir: Path, sess: Session, logger, run: int) -> None:
     """
     Compute magnitude and phase images from real+imaginary temp pairs.
 
-    Discovers temp files by glob + entity parsing. Output names are
-    derived from the temp files, which automatically strips the _temp_
-    marker and preserves all user entities.
+    Discovers every real temp file for this run and finds the matching
+    imaginary temp file by full entity match (inv, desc, acq, ...).
+    Output names are derived from the temp files, which strips the
+    _temp_ marker and preserves all user entities.
     """
-    for inv in [1, 2]:
-        real_f = _find_temp_file(anat_dir, run, inv, 'real')
-        imag_f = _find_temp_file(anat_dir, run, inv, 'imag')
+    # collect every real temp file for this run
+    real_files = []
+    for f in sorted(anat_dir.glob("*_temp_MP2RAGE.nii.gz")):
+        parsed = parse_bids_name(f.name)
+        e = parsed['entities']
+        if e.get('run') == str(run) and e.get('part') == 'real':
+            real_files.append((f, parsed))
 
-        if not real_f or not imag_f:
+    for real_f, real_parsed in real_files:
+        e = real_parsed['entities']
+        inv = e.get('inv')
+
+        # matching imag file: identical entities, part=imag
+        target = dict(e)
+        target['part'] = 'imag'
+        imag_f = _find_temp_by_entities(anat_dir, target)
+
+        if not imag_f:
+            logger.warning(f"  No matching imag temp file for {real_f.name}")
             continue
 
-        logger.info(f"  Computing mag/phase for inv-{inv}")
+        desc_str = f" desc-{e['desc']}" if 'desc' in e else ""
+        logger.info(f"  Computing mag/phase for inv-{inv}{desc_str}")
+
         try:
             nii_r = nib.load(real_f)
             nii_i = nib.load(imag_f)
             rd, id_ = nii_r.get_fdata(), nii_i.get_fdata()
-        except Exception as e:
-            logger.warning(f"Could not load files for inv-{inv}: {e}")
+        except Exception as ex:
+            logger.warning(f"Could not load files for inv-{inv}{desc_str}: {ex}")
             continue
 
         if rd.shape != id_.shape:
             logger.error(
-                f"Shape mismatch inv-{inv}: real={rd.shape}, imag={id_.shape}"
+                f"Shape mismatch inv-{inv}{desc_str}: "
+                f"real={rd.shape}, imag={id_.shape}"
             )
             continue
 
@@ -429,13 +447,12 @@ def _compute_mag_phase(anat_dir: Path, sess: Session, logger, run: int) -> None:
             except Exception:
                 pass
 
-        # inherit scans.tsv metadata from the magnitude-only split file (if it exists)
+        # inherit scans.tsv metadata from the magnitude-only split file
         mag_only_name = derive_bids_name(real_f.name, remove_entities=['part'])
         inv_entry = sess.get_scans_entry(f"anat/{mag_only_name}")
         inherited = {k: v for k, v in (inv_entry or {}).items() if k != "filename"}
 
         for part_label, d in [("mag", mag), ("phase", phase)]:
-            # derive_bids_name from temp file: strips _temp_, sets part
             out_name = derive_bids_name(real_f.name, part=part_label)
             out_nii = anat_dir / out_name
             out_json = anat_dir / out_name.replace('.nii.gz', '.json')
@@ -448,22 +465,18 @@ def _compute_mag_phase(anat_dir: Path, sess: Session, logger, run: int) -> None:
                     json.dump(m, f, indent=2)
                 logger.info(f"    Created: {out_nii.name}")
                 sess.add_to_scans_tsv(f"anat/{out_nii.name}", **(inherited or {}))
-            except Exception as e:
-                logger.warning(f"Failed: {out_name}: {e}")
+            except Exception as ex:
+                logger.warning(f"Failed: {out_name}: {ex}")
 
 
-def _find_temp_file(anat_dir: Path, run: int, inv: int,
-                    part_label: str) -> Optional[Path]:
-    """Find a temp intermediate file by matching run, inv, and part entities."""
+def _find_temp_by_entities(anat_dir: Path,
+                           target_entities: Dict[str, str]) -> Optional[Path]:
+    """Find a temp file whose entities exactly match the target dict."""
     for f in sorted(anat_dir.glob("*_temp_MP2RAGE.nii.gz")):
         parsed = parse_bids_name(f.name)
-        e = parsed['entities']
-        if (e.get('run') == str(run) and
-                e.get('inv') == str(inv) and
-                e.get('part') == part_label):
+        if parsed['entities'] == target_entities:
             return f
     return None
-
 
 # ============================================================
 # 4. Reshape UNIT1 (T1w)

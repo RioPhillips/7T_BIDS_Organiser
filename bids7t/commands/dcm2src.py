@@ -322,7 +322,7 @@ def _convert_to_sourcedata(sess, dicom_dir, logger):
     cmd = [
         "dcm2niix", "-v", "0", "-b", "o", "-r", "y", "-w", "0",
         "-o", str(sourcedata),
-        "-f", "%s_%d/%d_%5r.dcm",
+        "-f", "s%2s_%d/%d_%5r.dcm",
         str(dicom_dir),
     ]
     run_command(cmd, logger, log_file)
