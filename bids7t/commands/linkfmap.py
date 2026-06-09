@@ -13,7 +13,7 @@ TotalReadoutTime on the BOLD JSONs, which fMRIPrep needs for SDC.
 
 TotalReadoutTime is taken from the BOLD's own metadata: dcm2niix's EstimatedTotalReadoutTime is used when
 present, falling back to a Philips WFS computation from the BOLD's own
-DICOM. This removes any assumption that the EPI and BOLD share a readout.
+DICOM.
 
 Matching strategy (run-based):
   - one epi field for all BOLDs -> every BOLD references it
@@ -178,7 +178,7 @@ def _resolve_bold_trt(sess, bold: Path, logger) -> Optional[float]:
 
 
 def _trt_from_bold_dicom(sess, bold: Path, logger) -> Optional[float]:
-    """Compute TRT from the BOLD's own sourcedata DICOM (Philips WFS formula)."""
+    # Compute TRT from the BOLD's own sourcedata DICOM (Philips WFS formula)
     sourcedata = sess.paths["sourcedata"]
     if not sourcedata.exists():
         return None
