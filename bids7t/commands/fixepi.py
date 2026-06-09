@@ -73,47 +73,18 @@ def _update_direction_jsons(fmap_dir: Path, sourcedata_dir: Path,
     """
     Update EPI JSON sidecars for a specific phase encoding direction.
 
-    Discovers EPI files by suffix + dir entity (e.g. dir-AP) instead of
-    string-matching "AP" anywhere in the filename. This prevents false
-    positives from entities like acq-WRAP.
-
-    Also searches for ANY fmap file with the dir entity matching,
-    in case the user mapped SE fieldmaps to a non-epi suffix.
-
-    Parameters
-    ----------
-    direction : str
-        'AP' or 'PA'
-    ped : str
-        Phase encoding direction value (e.g. 'j-' or 'j')
+    PhaseEncodingDirection comes from the dir entity + config. TotalReadoutTime
+    is taken from the EPI's own dcm2niix EstimatedTotalReadoutTime, falling back
+    to a Philips WFS computation from the correctly-matched SE-EPI DICOM.
     """
-    # find EPI files with this dir entity
     epi_jsons = sess.find_by_suffix(
         "fmap", "epi", {"dir": direction}, extension="*.json"
     )
-
     if not epi_jsons:
         return
 
-    # find matching DICOM series in sourcedata for readout time computation
-    series_dirs = [
-        p for p in sourcedata_dir.iterdir()
-        if p.is_dir() and direction in p.name
-    ]
-    if not series_dirs:
-        logger.warning(f"No DICOM series found for {direction}")
-        return
-
-    dcm_files = list(series_dirs[0].glob("*.dcm"))
-    if not dcm_files:
-        return
-
-    dcm_file = dcm_files[0]
-    logger.info(f"Using DICOM {dcm_file.name} for {direction} metadata")
-
     for json_file in epi_jsons:
         nii_file = json_file.with_suffix("").with_suffix(".nii.gz")
-        # handle .nii.gz -> the json might correspond to a .nii.gz file
         if not nii_file.exists():
             nii_file = json_file.with_suffix(".nii.gz")
         meta = sess.get_json(nii_file)
@@ -123,22 +94,66 @@ def _update_direction_jsons(fmap_dir: Path, sourcedata_dir: Path,
                 "PhaseEncodingDirection" in meta):
             continue
 
-        try:
-            ds = pydicom.dcmread(str(dcm_file))
-            wfs = ds[0x2001, 0x1022].value   # Water Fat Shift (Philips)
-            imf = ds[0x0018, 0x0084].value   # Imaging Frequency
-            epf = ds[0x2001, 0x1013].value   # EPI Factor (Philips)
-        except Exception as e:
-            logger.error(f"Error reading DICOM: {e}")
-            continue
-
-        # Philips TotalReadoutTime formula
-        aes = wfs / (imf * 3.4 * (epf + 1))
-        trt = aes * epf
+        trt = _resolve_epi_trt(sess, nii_file, sourcedata_dir, direction, logger)
+        if trt is None:
+            logger.warning(
+                f"  {nii_file.name}: could not determine TotalReadoutTime; "
+                f"setting PhaseEncodingDirection only"
+            )
 
         sess.make_writable(json_file)
         meta["PhaseEncodingDirection"] = ped
-        meta["TotalReadoutTime"] = trt
+        if trt is not None:
+            meta["TotalReadoutTime"] = trt
         sess.write_json(nii_file, meta)
         sess.make_readonly(json_file)
-        logger.info(f"Updated {json_file.name}: PED={ped}, TRT={trt:.6f}")
+        trt_str = f", TRT={trt:.6f}" if trt is not None else ""
+        logger.info(f"Updated {json_file.name}: PED={ped}{trt_str}")
+
+
+def _resolve_epi_trt(sess, nii_file: Path, sourcedata_dir: Path,
+                     direction: str, logger) -> Optional[float]:
+    """Prefer dcm2niix's EstimatedTotalReadoutTime; fall back to DICOM."""
+    meta = sess.get_json(nii_file)
+    if "EstimatedTotalReadoutTime" in meta:
+        try:
+            return float(meta["EstimatedTotalReadoutTime"])
+        except (TypeError, ValueError):
+            pass
+    return _trt_from_epi_dicom(sourcedata_dir, direction, logger)
+
+
+def _trt_from_epi_dicom(sourcedata_dir: Path, direction: str,
+                        logger) -> Optional[float]:
+    """
+    Compute TRT from the SE-EPI fieldmap DICOM for this direction.
+
+    Requires 'dir-<direction>' in the folder name and excludes BOLD/func
+    series, so the 'AP' fieldmap is never confused with an
+    'fmri_..._dir-AP' BOLD series.
+    """
+    candidate = None
+    for p in sorted(sourcedata_dir.iterdir()):
+        if not p.is_dir():
+            continue
+        name = p.name.lower()
+        if f"dir-{direction}".lower() not in name:
+            continue
+        if any(x in name for x in ("fmri", "bold", "func")):
+            continue
+        candidate = p
+        break
+    if candidate is None:
+        return None
+    dcms = list(candidate.glob("*.dcm")) + list(candidate.glob("*.DCM"))
+    if not dcms:
+        return None
+    try:
+        ds = pydicom.dcmread(str(sorted(dcms)[0]), stop_before_pixels=True)
+        wfs = ds[0x2001, 0x1022].value   # Water Fat Shift (Philips)
+        imf = ds[0x0018, 0x0084].value   # Imaging Frequency
+        epf = ds[0x2001, 0x1013].value   # EPI Factor (Philips)
+        return (wfs / (imf * 3.4 * (epf + 1))) * epf
+    except Exception as e:
+        logger.debug(f"Could not compute TRT from DICOM ({direction}): {e}")
+        return None

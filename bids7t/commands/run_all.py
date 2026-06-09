@@ -64,6 +64,7 @@ def run_all_steps(
         ("fixanat", _run_fixanat),
         ("fixfmap", _run_fixfmap),
         ("fixepi", _run_fixepi),
+        ("linkfmap", _run_linkfmap),
         ("reorient", _run_reorient),
         ("slicetime", _run_slicetime),
     ]
@@ -140,6 +141,11 @@ def _run_fixfmap(studydir, subject, session, force, verbose):
 def _run_fixepi(studydir, subject, session, force, verbose):
     from bids7t.commands.fixepi import run_fixepi
     run_fixepi(studydir=studydir, subject=subject, session=session, force=force, verbose=verbose)
+
+def _run_linkfmap(studydir, subject, session, force, verbose):
+    from bids7t.commands.linkfmap import run_linkfmap
+    run_linkfmap(studydir=studydir, subject=subject, session=session,
+                 force=force, verbose=verbose)
 
 def _run_reorient(studydir, subject, session, force, verbose):
     from bids7t.commands.reorient import run_reorient

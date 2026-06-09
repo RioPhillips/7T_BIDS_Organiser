@@ -58,9 +58,10 @@ def cli():
       3. fixanat           - Fix anatomical files (MP2RAGE)
       4. fixfmap           - Fix fieldmap files (B0, B1/DREAM)
       5. fixepi            - Fix EPI JSON metadata
-      6. reorient          - Reorient images
-      7. slicetime         - Slice timing correction
-      8. bids7t validate   - Run BIDS validator
+      6. linkfmap          - Link fieldmaps to BOLD (B0FieldIdentifier/Source)
+      7. reorient          - Reorient images
+      8. slicetime         - Slice timing correction
+      9. bids7t validate   - Run BIDS validator
     
     \b
     Use 'bids7t COMMAND --help' for command-specific help.
@@ -165,6 +166,21 @@ def fixepi(studydir, subject, session, force, verbose, ap_phase_enc):
         run_fixepi(studydir=studydir, subject=subject, session=ses,
                    ap_phase_enc=ap_phase_enc, force=force, verbose=verbose)
 
+# --- linkfmap ---
+
+@cli.command(context_settings=dict(help_option_names=['-h', '--help']))
+@common_options
+def linkfmap(studydir, subject, session, force, verbose):
+    """Link fieldmaps to BOLD (B0FieldIdentifier/Source) + BOLD PED/TRT.
+
+    PEPOLAR: shares one B0FieldIdentifier across the dir-AP/dir-PA epi
+    pair and points each BOLD at it via B0FieldSource. Run after fixepi.
+    """
+    studydir = resolve_studydir(studydir)
+    from bids7t.commands.linkfmap import run_linkfmap
+    for ses in _resolve_sessions(studydir, subject, session):
+        run_linkfmap(studydir=studydir, subject=subject, session=ses,
+                     force=force, verbose=verbose)
 
 # --- reorient ---
 
@@ -186,15 +202,17 @@ def reorient(studydir, subject, session, force, verbose, orientation, modality):
 
 @cli.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-@click.option('--slice-order', type=click.Choice(['up', 'down', 'odd', 'even']), default='down')
-@click.option('--slice-direction', type=int, default=3)
-def slicetime(studydir, subject, session, force, verbose, slice_order, slice_direction):
-    """Slice timing correction using FSL slicetimer."""
+def slicetime(studydir, subject, session, force, verbose):
+    """Populate SliceTiming metadata
+
+    Preserves an existing scanner-written SliceTiming by default;
+    use --force to recompute from config settings and overwrite.
+    """
     studydir = resolve_studydir(studydir)
     from bids7t.commands.slicetime import run_slicetime
     for ses in _resolve_sessions(studydir, subject, session):
         run_slicetime(studydir=studydir, subject=subject, session=ses,
-                      slice_order=slice_order, slice_direction=slice_direction, force=force, verbose=verbose)
+                      force=force, verbose=verbose)
 
 
 # --- validate ---
@@ -361,6 +379,9 @@ def fixfmap_main():
 
 def fixepi_main():
     fixepi(standalone_mode=True)
+
+def linkfmap_main():
+    linkfmap(standalone_mode=True)
 
 def reorient_main():
     reorient(standalone_mode=True)

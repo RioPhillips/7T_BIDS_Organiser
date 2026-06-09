@@ -6,6 +6,7 @@ from .src2rawdata import run_src2rawdata
 from .fixanat import run_fixanat
 from .fixfmap import run_fixfmap
 from .fixepi import run_fixepi
+from .linkfmap import run_linkfmap
 from .reorient import run_reorient
 from .slicetime import run_slicetime
 from .validate import run_validate
@@ -14,6 +15,6 @@ from .run_all import run_all_steps
 
 __all__ = [
     "run_init", "run_dcm2src", "run_src2rawdata", "run_fixanat", "run_fixfmap",
-    "run_fixepi", "run_reorient", "run_slicetime", "run_validate",
+    "run_fixepi", "run_linkfmap", "run_reorient", "run_slicetime", "run_validate",
     "run_qc", "run_all_steps",
 ]
